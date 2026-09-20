@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from adb_core import Adb, App, UserError, MAX_TRANSFER, remote_path
 
 ICONS = {
+    'wifi': '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
     'moon': '<path d="M20.5 13A9 9 0 0 1 11 3.5 9 9 0 1 0 20.5 13Z"/>',
     'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
     'overview': '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
@@ -143,6 +144,7 @@ class Job(QRunnable):
     def run(self):
         try: self.signals.result.emit(self.fn())
         except Exception as exc: self.signals.error.emit(str(exc) or '操作失败，请检查设备连接。')
+        finally: self.fn = None
 
 
 class DeviceArt(QWidget):
@@ -191,11 +193,11 @@ class Window(QMainWindow):
         names=QVBoxLayout(); names.setSpacing(2); names.addWidget(label('泰山派','brand')); names.addWidget(label('Device Manager','caption')); brand.addLayout(names); brand.addStretch(); side.addLayout(brand)
         side.addSpacing(30); side.addWidget(label('  设备管理','sideHeading')); side.addSpacing(5)
         self.nav=[]
-        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('命令控制台','terminal'),('服务与维护','settings')]):
+        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('命令控制台','terminal'),('服务与维护','settings'),('Wi-Fi 网络','wifi')]):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.1','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.2','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -208,9 +210,9 @@ class Window(QMainWindow):
         self.net_panel=QWidget(); net=QHBoxLayout(self.net_panel); net.setContentsMargins(0,5,0,0); self.address=QLineEdit('192.168.1.150:5555'); self.address.setPlaceholderText('设备 IP:端口'); self.connect_btn=button('连接',self.connect_network,'primary'); net.addWidget(self.address,1); net.addWidget(self.connect_btn); self.net_panel.hide(); connection_layout.addWidget(self.net_panel); outer.addWidget(connection)
         self.banner=label('','notice',True); self.banner.hide(); outer.addWidget(self.banner)
         self.stack=QStackedWidget(); outer.addWidget(self.stack,1)
-        self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services()
+        self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
-        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.run_btn,self.reboot_btn,*self.service_buttons]
+        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.run_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
@@ -285,12 +287,111 @@ class Window(QMainWindow):
         row.addStretch(); box.addLayout(row); self.service_output=self.console('连接设备后查看服务状态。'); self.service_output.setMinimumHeight(160); box.addWidget(self.service_output); layout.addWidget(frame)
         frame,box=card(); box.addWidget(label('设备维护','section')); row=QHBoxLayout(); row.addWidget(label('重启将中断当前服务与 ADB 连接。','subtle',True),1); self.reboot_btn=button('重启设备',self.reboot,'danger','power'); row.addWidget(self.reboot_btn); box.addLayout(row); box.addWidget(label('固件烧录请使用瑞芯微烧录工具。','caption')); layout.addWidget(frame); layout.addStretch()
 
+    def build_wifi(self):
+        self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
+        layout=self.scroll_page(); frame,box=card()
+        row=QHBoxLayout(); row.addWidget(label('附近的 Wi-Fi','section')); row.addStretch()
+        self.wifi_iface=QComboBox(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.setAccessibleName('无线网卡')
+        self.wifi_iface.currentIndexChanged.connect(self.clear_wifi_selection); row.addWidget(self.wifi_iface)
+        self.wifi_scan_btn=button('扫描附近 Wi-Fi',self.scan_wifi,'primary','wifi'); row.addWidget(self.wifi_scan_btn)
+        self.wifi_status_btn=button('刷新状态',self.refresh_wifi,symbol='refresh'); row.addWidget(self.wifi_status_btn); box.addLayout(row)
+        self.wifi_status=label('连接泰山派后，扫描设备附近的无线网络。','subtle',True); box.addWidget(self.wifi_status)
+        self.wifi_table=QTableWidget(0,4); self.wifi_table.setHorizontalHeaderLabels(['Wi-Fi 名称','信号','频段','安全性'])
+        self.wifi_table.verticalHeader().hide(); self.wifi_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.wifi_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.wifi_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.wifi_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        for col in (1,2,3): self.wifi_table.horizontalHeader().setSectionResizeMode(col,QHeaderView.ResizeMode.ResizeToContents)
+        self.wifi_table.verticalHeader().setDefaultSectionSize(43); self.wifi_table.setMinimumHeight(190)
+        self.wifi_table.itemSelectionChanged.connect(self.select_wifi); box.addWidget(self.wifi_table)
+        self.wifi_hint=label('列表来自泰山派的无线网卡，点击扫描开始。','caption',True); box.addWidget(self.wifi_hint); layout.addWidget(frame)
+        frame,box=card(); self.wifi_selected=label('选择一个 Wi-Fi 网络','section',True); box.addWidget(self.wifi_selected)
+        row=QHBoxLayout(); self.wifi_password=QLineEdit(); self.wifi_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.wifi_password.setPlaceholderText('输入 Wi-Fi 密码'); self.wifi_password.setAccessibleName('Wi-Fi 密码'); self.wifi_password.setMaxLength(128)
+        self.wifi_show_password=QCheckBox('显示密码'); self.wifi_show_password.toggled.connect(lambda checked:self.wifi_password.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password))
+        self.wifi_connect_btn=button('连接 Wi-Fi',self.connect_wifi,'primary'); row.addWidget(self.wifi_password,1); row.addWidget(self.wifi_show_password); row.addWidget(self.wifi_connect_btn); box.addLayout(row)
+        box.addWidget(label('建议使用 USB 连接。切换 Wi-Fi 可能中断网络 ADB；密码不保存在电脑上。','caption',True))
+        box.addWidget(label('本次连接不写入开机配置。重启后由设备原有的网络配置决定。','caption',True)); layout.addWidget(frame); layout.addStretch()
+
+    def clear_wifi_selection(self, *args):
+        self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_table.setRowCount(0)
+        self.wifi_password.clear(); self.wifi_show_password.setChecked(False)
+        self.wifi_selected.setText('选择一个 Wi-Fi 网络'); self.wifi_hint.setText('请扫描当前网卡附近的网络。')
+        self.wifi_status.setText('尚未获取当前网卡的连接状态。')
+
+    def selected_wifi(self):
+        row=self.wifi_table.currentRow()
+        item=self.wifi_table.item(row,0) if row>=0 else None
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def select_wifi(self):
+        network=self.selected_wifi(); self.wifi_password.clear(); self.wifi_show_password.setChecked(False)
+        self.wifi_selected.setText('连接到 '+(network['ssid'] or '隐藏网络') if network else '选择一个 Wi-Fi 网络')
+        self.wifi_password.setPlaceholderText('开放网络无需密码' if network and network['security']=='open' else '输入 Wi-Fi 密码')
+        self.wifi_password.setReadOnly(bool(network and network['security']!='psk'))
+
+    def scan_wifi(self):
+        if not self.require_device() or self.busy: return
+        data={'interface':self.wifi_iface.currentData() or ''}
+        self.clear_wifi_selection()
+        self.wifi_status.setText('正在扫描泰山派附近的 Wi-Fi…')
+        self.wifi_pending=True
+        self.work(lambda:self.call('wifi-scan',data),self.render_wifi_scan,'正在扫描 Wi-Fi…')
+
+    def refresh_wifi(self):
+        if not self.require_device() or self.busy: return
+        data={'interface':self.wifi_iface.currentData() or ''}
+        self.wifi_pending=True
+        self.work(lambda:self.call('wifi-status',data),self.render_wifi_status,'正在读取 Wi-Fi 状态…')
+
+    def render_wifi_status(self,data):
+        self.wifi_iface.blockSignals(True); self.wifi_iface.clear()
+        for name in data['interfaces']: self.wifi_iface.addItem(name,name)
+        self.wifi_iface.setCurrentIndex(max(0,self.wifi_iface.findData(data['interface']))); self.wifi_iface.blockSignals(False)
+        states={'COMPLETED':'已认证','DISCONNECTED':'未连接','INACTIVE':'未连接','SCANNING':'扫描中','ASSOCIATING':'连接中','ASSOCIATED':'已关联','4WAY_HANDSHAKE':'正在认证','GROUP_HANDSHAKE':'正在认证','INTERFACE_DISABLED':'无线网卡已禁用'}
+        if data['state']=='COMPLETED':
+            text=f'{data["interface"]} · {data["ssid"]} · '+('已连接 · '+data['ip'] if data['ip'] else '已认证，等待 IPv4 地址')
+        else: text=f'{data["interface"]} · '+states.get(data['state'],'状态：'+data['state'])
+        self.wifi_status.setText(text)
+
+    def render_wifi_scan(self,data):
+        self.render_wifi_status(data); self.wifi_scan_serial=self.serial; self.wifi_scan_iface=data['interface']
+        self.wifi_table.setRowCount(len(data['networks']))
+        for row,network in enumerate(data['networks']):
+            item=QTableWidgetItem(network['ssid'] or '隐藏网络（暂不支持）'); item.setData(Qt.ItemDataRole.UserRole,network)
+            item.setToolTip('BSSID: '+network['bssid']); self.wifi_table.setItem(row,0,item)
+            level='强' if network['signal']>=-55 else ('中' if network['signal']>=-70 else '弱')
+            band='2.4 GHz' if network['frequency']<3000 else ('5 GHz' if network['frequency']<5925 else '6 GHz')
+            for col,value in enumerate([f'{level} · {network["signal"]} dBm',band,network['security_label']],1): self.wifi_table.setItem(row,col,QTableWidgetItem(value))
+        self.wifi_hint.setText(f'发现 {len(data["networks"])} 个接入点 · 同名 Wi-Fi 可能来自不同路由器。' if data['networks'] else '未发现网络，请确认天线、距离或稍后重新扫描。')
+
+    def connect_wifi(self):
+        if not self.require_device() or self.busy: return
+        network=self.selected_wifi()
+        if not network or self.wifi_scan_serial!=self.serial or self.wifi_scan_iface!=(self.wifi_iface.currentData() or ''):
+            self.notify('请先扫描并选择当前设备的 Wi-Fi 网络。',True); return
+        if not network['ssid_hex'] or network['security'] not in ('psk','open'):
+            self.notify('暂不支持隐藏网络、企业认证或纯 WPA3 网络，请选择 WPA/WPA2 个人网络或开放网络。',True); return
+        if network['security']=='psk' and not self.wifi_password.text(): self.notify('请输入 Wi-Fi 密码。',True); self.wifi_password.setFocus(); return
+        transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'')
+        warnings=[]
+        if transport=='网络' or ':' in self.serial: warnings.append('当前使用网络 ADB，切换 Wi-Fi 可能立即断开管理连接。建议通过 USB 操作。')
+        if network['security']=='open': warnings.append('这是不加密的开放网络。')
+        if warnings and not self.ask('连接 Wi-Fi', '\n'.join(warnings)+'\n连接到：'+network['ssid']): return
+        data={'interface':self.wifi_scan_iface,'ssid_hex':network['ssid_hex'],'security':network['security'],'password':self.wifi_password.text()}
+        self.wifi_password.clear(); self.wifi_show_password.setChecked(False); self.wifi_status.setText('正在连接 '+network['ssid']+'，请等待认证和地址分配…')
+        def operation():
+            try: return self.call('wifi-connect',data)
+            finally: data['password']=''
+        def connected(result): self.render_wifi_status(result); self.notify(result['message'])
+        self.wifi_pending=True
+        self.work(operation,connected,'正在连接 Wi-Fi，最多约 1 分钟…')
+
     def notify(self,text,error=False):
         self.banner.setText(text); self.banner.setProperty('error',error); self.banner.style().unpolish(self.banner); self.banner.style().polish(self.banner); self.banner.show()
 
     def go(self,index,refresh=True):
         self.stack.setCurrentIndex(index)
-        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('命令控制台','熟悉的命令，更直观的工作空间。'),('服务与维护','常用操作，触手可及。')]
+        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('命令控制台','熟悉的命令，更直观的工作空间。'),('服务与维护','常用操作，触手可及。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
         self.title.setText(names[index][0]); self.subtitle.setText(names[index][1])
         for i,btn in enumerate(self.nav): btn.setChecked(i==index)
         if refresh and index==0: self.poll()
@@ -309,12 +410,15 @@ class Window(QMainWindow):
         self.job.signals.error.connect(lambda error:self.failed(error,silent)); self.pool.start(self.job)
 
     def complete(self,callback,data,silent):
+        self.wifi_pending=False
         self.set_busy(False); self.activity.setText('就绪')
         try: callback(data)
         except Exception as exc: self.notify(str(exc),True)
 
     def failed(self,error,silent=False):
         self.set_busy(False); self.activity.setText('操作未完成')
+        if self.wifi_pending: self.wifi_status.setText('操作未完成，请查看提示并刷新状态。')
+        self.wifi_pending=False
         if silent:
             self.previous_cpu=None; self.set_badge(False,'连接中断'); self.activity.setText('设备状态已过期 · 请刷新连接')
         self.notify(error,True)
@@ -350,6 +454,7 @@ class Window(QMainWindow):
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)
 
     def reset_data(self):
+        self.clear_wifi_selection(); self.wifi_iface.blockSignals(True); self.wifi_iface.clear(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.blockSignals(False)
         self.previous_cpu=None; self.file_serial=''; self.rows=[]; self.table.setRowCount(0); self.file_hint.setText('打开目录后查看文件。')
         for metric in self.metrics: metric.value.setText('—'); metric.detail.setText('等待设备数据'); metric.bar.setValue(0)
         for value in self.info_labels.values(): value.setText('—')
@@ -587,7 +692,7 @@ def main():
         def verify():
             attempts[0]+=1
             if window.busy and attempts[0]<40: QTimer.singleShot(500,verify); return
-            ok=(not window.busy and Path(window.api.adb.path).is_file() and window.stack.count()==5 and window.device_select.count()>0 and not window.banner.property('error'))
+            ok=(not window.busy and Path(window.api.adb.path).is_file() and window.stack.count()==6 and window.device_select.count()>0 and not window.banner.property('error'))
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

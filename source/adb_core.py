@@ -48,13 +48,14 @@ class Adb:
         self.locks = {}
         self.guard = threading.Lock()
 
-    def run(self, args, timeout=12, check=True):
+    def run(self, args, timeout=12, check=True, input_data=None):
         if not self.path:
             raise UserError('未找到 ADB。请保留软件目录中的 adb 文件夹，或设置 TAISHAN_ADB。')
         # File-backed output prevents a verbose command from exhausting RAM.
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             try:
-                result = subprocess.run([self.path, *args], stdout=out, stderr=err, stdin=subprocess.DEVNULL,
+                result = subprocess.run([self.path, *args], stdout=out, stderr=err,
+                                        **({'input': input_data} if input_data is not None else {'stdin': subprocess.DEVNULL}),
                                         timeout=timeout, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             except subprocess.TimeoutExpired:
                 raise UserError('ADB 操作超时，请检查设备连接。命令可能仍在设备端运行，请勿重复启动长任务。')
@@ -89,6 +90,10 @@ class Adb:
 
     def shell(self, serial, script, timeout=12, check=True):
         return self.run(['-s', serial, 'exec-out', 'sh', '-c', shlex.quote(script)], timeout, check)
+
+    def shell_input(self, serial, script, timeout=65):
+        # Credentials travel through stdin, never host process arguments or files.
+        return self.run(['-s', serial, 'exec-out', 'sh', '-s'], timeout, False, script.encode('utf-8'))
 
 
 STATUS_SCRIPT = r'''
@@ -158,6 +163,12 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path in ('/api/wifi-scan', '/api/wifi-status', '/api/wifi-connect'):
+                from wifi import Wifi
+                wifi = Wifi(self.adb, serial, data.get('interface', ''))
+                if path == '/api/wifi-scan': return wifi.scan()
+                if path == '/api/wifi-status': return wifi.status()
+                return wifi.connect(data)
             if path == '/api/status':
                 raw, _, _ = self.adb.shell(serial, STATUS_SCRIPT)
                 return parse_status(raw.decode('utf-8', 'replace'))
@@ -213,5 +224,4 @@ done
             raise UserError('不支持的操作。')
         finally:
             lock.release()
-
 

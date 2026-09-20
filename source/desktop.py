@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shlex
 import sys
 import tempfile
@@ -200,7 +201,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.17','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.18','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -209,8 +210,8 @@ class Window(QMainWindow):
         self.device_select=QComboBox(); self.device_select.setMinimumHeight(38); self.device_select.addItem('连接 USB 后，刷新设备',''); self.device_select.currentIndexChanged.connect(self.select_device); line.addWidget(self.device_select,1)
         self.refresh_btn=button('刷新设备',self.refresh,symbol='refresh'); line.addWidget(self.refresh_btn)
         self.net_btn=button('网络连接',self.toggle_network); line.addWidget(self.net_btn); connection_layout.addLayout(line)
-        self.connection_hint=label('用 USB 数据线连接开发板的 OTG 接口，无需填写 IP。','caption',True); connection_layout.addWidget(self.connection_hint)
-        self.net_panel=QWidget(); net=QHBoxLayout(self.net_panel); net.setContentsMargins(0,5,0,0); self.address=QLineEdit('192.168.1.150:5555'); self.address.setPlaceholderText('设备 IP:端口'); self.connect_btn=button('连接',self.connect_network,'primary'); net.addWidget(self.address,1); net.addWidget(self.connect_btn); self.net_panel.hide(); connection_layout.addWidget(self.net_panel); outer.addWidget(connection)
+        self.connection_hint=label('用 USB 数据线连接开发板的 OTG 接口；选择 USB 设备后会自动读取局域网 IP。','caption',True); connection_layout.addWidget(self.connection_hint)
+        self.net_panel=QWidget(); net=QHBoxLayout(self.net_panel); net.setContentsMargins(0,5,0,0); self.address=QLineEdit(''); self.address.setPlaceholderText('自动读取设备 IP:5555，也可手动填写'); self.connect_btn=button('连接',self.connect_network,'primary'); net.addWidget(self.address,1); net.addWidget(self.connect_btn); self.net_panel.hide(); connection_layout.addWidget(self.net_panel); outer.addWidget(connection)
         self.banner=label('','notice',True); self.banner.hide(); outer.addWidget(self.banner)
         self.stack=QStackedWidget(); outer.addWidget(self.stack,1)
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
@@ -544,6 +545,8 @@ class Window(QMainWindow):
             self.device_select.addItem(f'{device["transport"]}  ·  {device["serial"]}  ·  {"在线" if device["state"]=="device" else device["state"]}',device['serial'])
             if device['state']!='device': self.device_select.model().item(self.device_select.count()-1).setEnabled(False)
         online=[d['serial'] for d in devices if d['state']=='device']; chosen=old if old in online else next(iter(online),''); self.device_select.setCurrentIndex(max(0,self.device_select.findData(chosen))); self.device_select.blockSignals(False); self.select_device()
+        usb=next((d['serial'] for d in devices if d['state']=='device' and d['transport']=='USB'), '')
+        if usb: self.sync_lan_address(usb)
         if any(d['state']=='unauthorized' for d in devices): self.connection_hint.setText('设备未授权，请在设备端允许 USB 调试。')
         elif not devices: self.connection_hint.setText('未识别到 ADB 设备。请检查数据线、OTG 接口、驱动与板端 adbd 服务。')
 
@@ -575,6 +578,18 @@ class Window(QMainWindow):
         self.log_output.clear(); self.service_output.clear(); self.monitor_label.setText('安装并启动流量监控插件后显示数据。'); self.clear_storage(); self.storage_box.addWidget(label('等待设备数据','subtle'))
 
     def toggle_network(self): self.net_panel.setVisible(not self.net_panel.isVisible())
+
+    def sync_lan_address(self,serial):
+        if not self.api.adb.path or not Path(self.api.adb.path).is_file(): return
+        def update(data):
+            text=data.decode('utf-8','replace'); match=re.search(r'inet[ \t]+([0-9.]+)/',text)
+            if not match: return
+            ip=match.group(1); line=next((line for line in text.splitlines() if match.group(0) in line),''); interface=(line.split()[1] if len(line.split())>1 else '')
+            if interface == 'lo' or ip.startswith(('127.','169.254.')): return
+            self.address.setText(ip+':5555')
+            self.address.setToolTip(f'从 USB ADB 自动读取：{interface} · {ip}')
+            self.connection_hint.setText(f'已读取局域网地址 {ip}:5555；点击“网络连接”即可切换到网络 ADB。')
+        self.work(lambda:self.api.adb.shell(serial,"ip -o -4 addr show scope global 2>/dev/null",timeout=5)[0],update,'正在读取泰山派局域网 IP…',True)
 
     def connect_network(self):
         address=self.address.text().strip()

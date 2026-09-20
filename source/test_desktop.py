@@ -104,14 +104,22 @@ class DesktopTests(unittest.TestCase):
         self.assertIsNot(self.window.terminal,first)
 
     def test_terminal_tabs_auto_connect_when_device_is_selected(self):
-        self.api.adb.path='test-adb'
-        with patch.object(self.window.terminal,'connect_device') as connect:
+        self.api.adb.path=sys.executable
+        with patch.object(Path,'is_file',return_value=True), patch.object(self.window.terminal,'connect_device') as connect:
             self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}])
             QTest.qWait(20)
             connect.assert_called_with(self.api.adb.path,'usb-test')
         with patch.object(Terminal,'connect_device') as connect:
             self.window.new_terminal_tab(); QTest.qWait(20)
             self.assertTrue(connect.called)
+
+    def test_usb_refresh_syncs_lan_address(self):
+        self.api.adb.path='test-adb'
+        with patch.object(Path,'is_file',return_value=True), patch.object(Terminal,'connect_device'), patch.object(self.api.adb,'shell',return_value=(b'3: wlan0    inet 192.168.1.148/24 brd 192.168.1.255 scope global wlan0\n','',0)), patch.object(self.window,'work',side_effect=lambda fn,callback,*args,**kwargs:callback(fn())):
+            self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}])
+            self.window.sync_lan_address('usb-test')
+            self.wait_idle()
+        self.assertEqual(self.window.address.text(),'192.168.1.148:5555')
 
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))

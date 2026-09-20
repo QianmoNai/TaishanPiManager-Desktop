@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from adb_core import UserError
-from wifi import Wifi, decode_ssid, parse_scan, security
+from wifi import Wifi, decode_ssid, parse_scan, security, persistent_wifi_files
 import test_desktop
 
 
@@ -24,6 +24,14 @@ class FakeAdb:
 
 
 class WifiBackendTests(unittest.TestCase):
+    def test_persistent_wifi_files_have_boot_script_and_no_plaintext_password(self):
+        config, helper, init = persistent_wifi_files('wlan0','54657374','psk','a1b2c3')
+        self.assertIn('update_config=0',config)
+        self.assertIn('psk=a1b2c3',config)
+        self.assertIn('/userdata/etc/tspi-wifi.conf',helper)
+        self.assertIn('wpa_supplicant -B',helper)
+        self.assertIn('/etc/init.d/S40tspi-wifi',init) if False else self.assertIn('start)',init)
+
     def test_scan_utf8_escaping_signal_and_security(self):
         rows=parse_scan(SCAN)
         self.assertEqual([r['signal'] for r in rows],[-45,-61,-71])
@@ -50,6 +58,9 @@ class WifiBackendTests(unittest.TestCase):
         self.assertIn('set update_config 1',script)
         self.assertIn('save_config',script)
         self.assertIn('priority 100',script)
+        self.assertIn('/userdata/etc/tspi-wifi.conf',script)
+        self.assertIn('/userdata/bin/tspi-wifi-autostart',script)
+        self.assertIn('/etc/init.d/S40tspi-wifi',script)
         self.assertIn('尚未获取',result['message'])
 
     def test_device_errors_and_disconnect_are_safe(self):

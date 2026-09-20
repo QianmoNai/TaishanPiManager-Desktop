@@ -107,6 +107,54 @@ ERRORS = {
 }
 
 
+def persistent_wifi_files(interface, ssid_hex, mode, psk=''):
+    """Return the persistent config and boot helper for the selected network."""
+    if mode == 'psk':
+        network = f'''network={{
+    ssid={ssid_hex.lower()}
+    key_mgmt=WPA-PSK
+    psk={psk}
+    priority=100
+}}
+'''
+    else:
+        network = f'''network={{
+    ssid={ssid_hex.lower()}
+    key_mgmt=NONE
+    priority=100
+}}
+'''
+    config = 'ctrl_interface=/var/run/wpa_supplicant\nupdate_config=0\n' + network
+    helper = f'''#!/bin/sh
+IFACE={shlex.quote(interface)}
+CONF=/userdata/etc/tspi-wifi.conf
+CTRL=/var/run/wpa_supplicant
+mkdir -p "$CTRL" || exit 1
+# Replace any existing instance so the saved profile is loaded on boot.
+if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
+    wpa_cli -p "$CTRL" -i "$IFACE" terminate >/dev/null 2>&1 || true
+    sleep 1
+fi
+ip link set "$IFACE" up >/dev/null 2>&1 || exit 1
+wpa_supplicant -B -i "$IFACE" -c "$CONF" -C "$CTRL" >/dev/null 2>&1 || exit 1
+sleep 1
+if command -v dhcpcd >/dev/null 2>&1; then
+    dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1 &
+elif command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+    udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1 &
+fi
+exit 0
+'''
+    init = '''#!/bin/sh
+case "$1" in
+    start) /userdata/bin/tspi-wifi-autostart >/dev/null 2>&1 & ;;
+    restart) /userdata/bin/tspi-wifi-autostart >/dev/null 2>&1 & ;;
+esac
+exit 0
+'''
+    return config, helper, init
+
+
 def sections(raw):
     return {m[1]: m[2].strip('\r\n') for m in re.finditer(r'@@(\w+)\r?\n(.*?)(?=@@\w+\r?\n|\Z)', raw, re.S)}
 
@@ -169,6 +217,15 @@ printf '@@status\n'; cli status
             credential = f'cli set_network "$new_id" key_mgmt WPA-PSK | grep -q "^OK$" || fail_setup\ncli set_network "$new_id" psk {psk} | grep -q "^OK$" || fail_setup\n'
         else:
             credential = 'cli set_network "$new_id" key_mgmt NONE | grep -q "^OK$" || fail_setup\n'
+        persistent_config, persistent_helper, persistent_init = persistent_wifi_files(self.interface, ssid_hex, mode, psk if mode == 'psk' else '')
+        persist = f'''mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
+printf %s {shlex.quote(persistent_config)} > /userdata/etc/tspi-wifi.conf || fail_save
+chmod 600 /userdata/etc/tspi-wifi.conf || fail_save
+printf %s {shlex.quote(persistent_helper)} > /userdata/bin/tspi-wifi-autostart || fail_save
+chmod 755 /userdata/bin/tspi-wifi-autostart || fail_save
+printf %s {shlex.quote(persistent_init)} > /etc/init.d/S40tspi-wifi || fail_save
+chmod 755 /etc/init.d/S40tspi-wifi || fail_save
+'''
         script = self.prepare(True) + r'''
 old_id=$(cli status | sed -n 's/^id=//p')
 enabled=$(cli list_networks | awk -F '\t' 'NR>1 && $1 ~ /^[0-9]+$/ && $4 !~ /\[DISABLED\]/ {print $1}')
@@ -182,6 +239,7 @@ rollback() {
 trap rollback EXIT
 trap 'exit 1' INT TERM HUP
 fail_setup() { echo ERR:SETUP_FAILED; exit 1; }
+fail_save() { echo ERR:SAVE_FAILED; exit 1; }
 new_id=$(cli add_network)
 case "$new_id" in ''|*[!0-9]*) new_id=''; fail_setup;; esac
 ''' + f'cli set_network "$new_id" ssid {ssid_hex.lower()} | grep -q "^OK$" || fail_setup\n' + credential + r'''
@@ -198,6 +256,7 @@ done
 # Persist the selected network so wpa_supplicant can reconnect after reboot.
 cli set update_config 1 | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
 cli save_config | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
+''' + persist + r'''
 committed=1
 # Existing dhcpcd usually handles link events. Ask it to refresh this interface only.
 if command -v dhcpcd >/dev/null 2>&1; then

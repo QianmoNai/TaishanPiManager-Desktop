@@ -1,0 +1,8 @@
+#!/bin/sh
+# TSPI_MANAGER_MONITOR_V1
+case "$1" in
+  start) /userdata/bin/start_check_monitor;;
+  stop) /userdata/bin/stop_check_monitor;;
+  restart) /userdata/bin/stop_check_monitor && /userdata/bin/start_check_monitor;;
+  *) echo 'Usage: S95check-monitor start|stop|restart'; exit 2;;
+esac

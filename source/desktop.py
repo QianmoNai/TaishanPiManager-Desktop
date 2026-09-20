@@ -197,7 +197,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.2.1','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.3','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -213,6 +213,7 @@ class Window(QMainWindow):
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.run_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
+        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart])
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
@@ -281,6 +282,10 @@ class Window(QMainWindow):
 
     def build_services(self):
         layout=self.scroll_page(); frame,box=card(); box.addWidget(label('网络健康监控','section')); self.monitor_label=label('调用设备上已安装的 check_orangepi 监控脚本。','subtle',True); box.addWidget(self.monitor_label)
+        install_row=QHBoxLayout(); self.install_monitor_btn=button('安装监控插件',self.install_monitor,'primary','settings'); install_row.addWidget(self.install_monitor_btn)
+        self.monitor_autostart=QCheckBox('安装时启用开机自动启动'); install_row.addWidget(self.monitor_autostart); install_row.addStretch(); box.addLayout(install_row)
+        box.addWidget(label('离线安装，无需改 SDK。每 10 分钟检查 QWRT 192.168.1.1 与香橙派 192.168.1.158。','caption',True))
+        box.addWidget(label('安装后手动启动；不启用 LCD／雷达。运行结果请看下方日志，检查异常不等于插件安装失败。','caption',True))
         row=QHBoxLayout(); self.service_buttons=[]
         for title,action in [('查看状态','status'),('启动服务','start'),('停止服务','stop')]:
             btn=button(title,lambda checked=False,a=action:self.service(a),'primary' if action=='start' else 'secondary'); self.service_buttons.append(btn); row.addWidget(btn)
@@ -491,7 +496,7 @@ class Window(QMainWindow):
         ratio=100*data['memoryUsed']/data['memoryTotal'] if data['memoryTotal'] else 0; mem.value.setText(f'{ratio:.1f}%'); mem.bar.setValue(round(ratio*10)); mem.detail.setText(bytes_text(data['memoryUsed'])+' / '+bytes_text(data['memoryTotal']))
         temp.value.setText(f'{data["temperature"]:.1f}°' if data['temperature'] is not None else '不支持'); temp.bar.setValue(min(1000,max(0,int((data['temperature'] or 0)*10)))); temp.detail.setText('摄氏度 · thermal_zone0')
         minutes=int(data['uptime']/60); uptime.value.setText(f'{minutes//1440}天 {minutes%1440//60}时' if minutes>=1440 else f'{minutes//60}时 {minutes%60}分'); uptime.bar.setValue(0); uptime.detail.setText('负载 '+' / '.join(data['load']))
-        self.monitor_label.setText('已检测到网络健康监控脚本。' if data['monitorAvailable'] else '此设备未安装监控脚本，其他管理功能仍可使用。')
+        self.monitor_label.setText('已检测到网络健康监控脚本。' if data['monitorAvailable'] else '此设备未安装监控插件，可在“服务与维护”页面安装。')
         self.clear_storage()
         for disk in data['disks']:
             group=QWidget(); layout=QVBoxLayout(group); layout.setContentsMargins(0,0,0,5); layout.setSpacing(7); row=QHBoxLayout(); row.addWidget(label(disk['mount'],'infoValue')); row.addStretch(); row.addWidget(label(disk['percent'],'caption')); layout.addLayout(row)
@@ -577,6 +582,18 @@ class Window(QMainWindow):
         if not self.require_device(): return
         if action!='status' and not self.ask('确认服务操作',f'将在 {self.serial} 上'+('启动' if action=='start' else '停止')+'监控服务。'): return
         self.work(lambda:self.call('service',{'action':action,'confirm':True}),lambda data:self.service_output.setPlainText(data['output'] or '操作完成'),'正在执行服务操作…')
+
+    def install_monitor(self):
+        if not self.require_device() or self.busy: return
+        autostart=self.monitor_autostart.isChecked()
+        detail='将在当前设备 /userdata/bin 安装监控脚本，先校验依赖并备份已有插件文件。\n监控目标：QWRT 192.168.1.1、香橙派 192.168.1.158。\n'
+        detail+=('同时配置开机自动启动。' if autostart else '不更改已有开机启动设置。')
+        detail+='\n安装完成后可点击“启动服务”。'
+        if not self.ask('安装监控插件',detail): return
+        def completed(data):
+            self.monitor_label.setText('监控插件已安装。可查看状态或启动服务。')
+            self.service_output.setPlainText(data['output']); self.notify('监控插件安装成功。')
+        self.work(lambda:self.call('monitor-install',{'confirm':True,'autostart':autostart}),completed,'正在上传、校验并安装监控插件…')
 
     def reboot(self):
         if not self.require_device() or not self.ask('重启设备',f'确认重启 {self.serial}？\n当前运行的服务将中断。'): return
@@ -693,6 +710,8 @@ def main():
             attempts[0]+=1
             if window.busy and attempts[0]<40: QTimer.singleShot(500,verify); return
             ok=(not window.busy and Path(window.api.adb.path).is_file() and window.stack.count()==6 and window.device_select.count()>0 and not window.banner.property('error'))
+            from monitor_plugin import ASSETS, NAMES
+            ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

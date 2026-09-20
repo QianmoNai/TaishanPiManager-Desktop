@@ -176,6 +176,9 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/monitor-install':
+                from monitor_plugin import install
+                return install(self.adb, serial, data)
             if path in ('/api/wifi-scan', '/api/wifi-status', '/api/wifi-connect'):
                 from wifi import Wifi
                 wifi = Wifi(self.adb, serial, data.get('interface', ''))

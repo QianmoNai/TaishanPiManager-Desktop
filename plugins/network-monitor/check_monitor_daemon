@@ -1,22 +1,4 @@
 #!/bin/sh
 # TSPI_MANAGER_MONITOR_V1
-umask 077
-child=''
-finish() {
-  trap - TERM INT HUP
-  if [ -n "$child" ]; then kill "$child" 2>/dev/null; wait "$child" 2>/dev/null; fi
-  exit 0
-}
-trap finish TERM INT HUP
-mkdir -p /userdata/log
-while :; do
-  log=/userdata/log/check_lan_monitor.log
-  size=$(stat -c %s "$log" 2>/dev/null) || size=0
-  if [ "$size" -gt 1048576 ]; then mv -f "$log" "$log.1"; fi
-  date '+[%Y-%m-%d %H:%M:%S] network check started' >> "$log"
-  /userdata/bin/check_orangepi >> "$log" 2>&1 &
-  child=$!; wait "$child"; result=$?; child=''
-  printf 'Check exit code: %s; next check in 600 seconds\n' "$result" >> "$log"
-  sleep 600 &
-  child=$!; wait "$child"; child=''
-done
+export LC_ALL=C LANG=C
+exec perl /userdata/bin/traffic_sampler.pl

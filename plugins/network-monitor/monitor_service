@@ -7,15 +7,15 @@ running() {
   pid=$(cat "$pidfile" 2>/dev/null) || return 1
   case "$pid" in ''|*[!0-9]*) return 1;; esac
   [ -r "/proc/$pid/cmdline" ] || return 1
-  tr '\000' '\n' < "/proc/$pid/cmdline" | grep -Fxq /userdata/bin/check_monitor_daemon || return 1
+  tr '\000' '\n' < "/proc/$pid/cmdline" | grep -Fxq /userdata/bin/traffic_sampler.pl || return 1
   kill -0 "$pid" 2>/dev/null
 }
 if [ "${1:-}" = status ]; then
-  echo 'Network monitor plugin v1.0 (desktop installer)'
+  echo 'Traffic monitor plugin v2.0 (desktop installer)'
   if running; then echo "RUNNING pid=$pid"; else echo STOPPED; fi
   if [ -x /etc/init.d/S95check-monitor ]; then echo 'Autostart: configured'; else echo 'Autostart: off'; fi
-  echo 'Targets: Orange Pi 192.168.1.158, QWRT 192.168.1.1; interval=600s; LCD/LiDAR=off'
-  if [ -f /userdata/log/check_lan_monitor.log ]; then tail -n 40 /userdata/log/check_lan_monitor.log; else echo 'No log yet; start service to begin checking.'; fi
+  echo 'Traffic: sample=2s, persistent totals=60s; no health checks' 
+  if [ -f /userdata/log/traffic-monitor.log ]; then tail -n 40 /userdata/log/traffic-monitor.log; else echo 'No errors logged. View traffic in the desktop app.'; fi
   exit 0
 fi
 mkdir "$lock" 2>/dev/null || { echo 'Service is busy. If interrupted, inspect /var/run/tspi-monitor-control.lock.'; exit 1; }
@@ -25,7 +25,7 @@ case "${1:-}" in
   start)
     if running; then echo "Already running pid=$pid"; exit 0; fi
     mkdir -p /userdata/log
-    nohup /userdata/bin/check_monitor_daemon </dev/null >/dev/null 2>&1 &
+    nohup /userdata/bin/check_monitor_daemon </dev/null >>/userdata/log/traffic-monitor.log 2>&1 &
     pid=$!; printf '%s\n' "$pid" > "$pidfile"
     sleep 1
     running || { echo 'Monitor failed to start'; exit 1; }

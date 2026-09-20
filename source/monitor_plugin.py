@@ -6,7 +6,7 @@ import shlex
 import sys
 from adb_core import UserError
 
-NAMES = ('check_orangepi.pl','check_orangepi','check_monitor_daemon','monitor_service',
+NAMES = ('traffic_sampler.pl','check_orangepi.pl','check_orangepi','check_monitor_daemon','monitor_service',
          'start_check_monitor','stop_check_monitor','status_check_monitor')
 ASSETS = (Path(sys._MEIPASS) if getattr(sys,'frozen',False) else Path(__file__).resolve().parent.parent)/'plugins/network-monitor'
 
@@ -27,6 +27,7 @@ set -e
 for command in perl sha256sum sh cp mv chmod mkdir grep tr nohup stat; do
   command -v "$command" >/dev/null || { echo "缺少依赖: $command"; exit 1; }
 done
+LC_ALL=C LANG=C perl -MJSON::PP -MTime::HiRes -MFcntl -e 'exit 0'
 test -d /userdata && test -w /userdata || { echo '/userdata 不可写。'; exit 1; }
 if [ -x /userdata/bin/status_check_monitor ]; then
   grep -q '^# TSPI_MANAGER_MONITOR_V1$' /userdata/bin/status_check_monitor || { echo '检测到旧版或其他来源的监控脚本，为避免覆盖，请先手动迁移。'; exit 1; }

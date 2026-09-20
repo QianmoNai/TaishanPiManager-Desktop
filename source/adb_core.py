@@ -15,7 +15,7 @@ import threading
 MAX_TRANSFER = 512 * 1024 * 1024
 MAX_OUTPUT = 2 * 1024 * 1024
 PORTABLE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent.parent
-LOG_PATHS = {'kernel': None, 'system': '/var/log/messages', 'monitor': '/userdata/log/check_lan_monitor.log', 'autostart': '/userdata/log/check_monitor_autostart.log'}
+LOG_PATHS = {'kernel': None, 'system': '/var/log/messages', 'monitor': '/userdata/log/traffic-monitor.log', 'autostart': '/userdata/log/check_monitor_autostart.log'}
 SERVICE_CMDS = {'status': '/userdata/bin/status_check_monitor', 'start': '/userdata/bin/start_check_monitor', 'stop': '/userdata/bin/stop_check_monitor'}
 
 
@@ -176,6 +176,9 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/traffic-status':
+                from traffic import status
+                return status(self.adb, serial)
             if path == '/api/monitor-install':
                 from monitor_plugin import install
                 return install(self.adb, serial, data)
@@ -231,7 +234,7 @@ done
                 if action!='status' and data.get('confirm') is not True:
                     raise UserError('请确认服务操作。')
                 _, _, exists = self.adb.shell(serial, 'test -x '+shlex.quote(SERVICE_CMDS[action]), check=False)
-                if exists: raise UserError('当前固件未安装网络健康监控脚本，暂时无法使用此项服务功能。')
+                if exists: raise UserError('当前固件未安装网络流量监控插件，暂时无法使用此项服务功能。')
                 out, _, _ = self.adb.shell(serial, shlex.quote(SERVICE_CMDS[action]), timeout=20)
                 return {'output': out.decode('utf-8', 'replace')}
             if path == '/api/reboot':

@@ -21,6 +21,16 @@ class FakeAdb:
         return b'','',0
 
 class PublicSpeedTests(unittest.TestCase):
+    def test_probe_failure_reports_board_diagnostic(self):
+        class FailingProbeAdb(FakeAdb):
+            def shell(self,serial,cmd,**kw):
+                self.commands.append(cmd)
+                if 'ip -o' in cmd: return b'3: wlan0 inet 192.168.1.148/24','',0
+                if ' probe ' in cmd: return b'DNS failed\n','',1
+                return b'','',0
+        with self.assertRaisesRegex(UserError,'DNS failed'):
+            public_speed_test(FailingProbeAdb(),'usb','wlan0')
+
     def test_node_list_includes_domestic_and_overseas_entries(self):
         self.assertGreaterEqual(len(NODES),9)
         self.assertTrue(any('Leaseweb' in name for name,_,_ in NODES))

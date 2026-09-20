@@ -57,9 +57,15 @@ ip -o -4 addr show dev "$dev"
         progress('正在准备公网测速…')
         adb.run(['-s',serial,'push',str(helper),path],timeout=10)
         adb.shell(serial,'test "$(sha256sum '+q(path)+' | cut -d " " -f 1)" = '+digest+' && LC_ALL=C LANG=C perl -c '+q(path),timeout=5)
-        prefix='LC_ALL=C LANG=C timeout 28 perl '+q(path)+' '
+        # Ten fixed nodes can each spend several seconds on DNS/connect/header
+        # probing. Keep the board-side timeout below the ADB timeout, and show
+        # the real board-side diagnostic if the command still fails.
+        prefix='LC_ALL=C LANG=C timeout 90 perl '+q(path)+' '
         progress('正在检测国内及海外节点…')
-        raw,_,_=adb.shell(serial,prefix+'probe '+q(address),timeout=31)
+        raw,err,code=adb.shell(serial,prefix+'probe '+q(address),timeout=95,check=False)
+        if code:
+            detail=(raw+err.encode('utf-8','replace')).decode('utf-8','replace').strip()
+            raise UserError('设备公网节点探测失败。'+(('\n'+detail[:500]) if detail else ' 请检查设备的 Perl、DNS 和外网连接。'))
         try:
             nodes=json.loads(raw.decode())
             if not isinstance(nodes,list): raise ValueError()
@@ -75,7 +81,10 @@ ip -o -4 addr show dev "$dev"
             try:
                 for mode,title in (('download','下载'),('upload','上传')):
                     progress('正在测试'+title+' · '+name+'…')
-                    raw,_,code=adb.shell(serial,prefix+mode+' '+q(address)+' '+str(n['index']),timeout=31,check=False)
+                    raw,err,code=adb.shell(serial,prefix+mode+' '+q(address)+' '+str(n['index']),timeout=95,check=False)
+                    if code and not raw.strip():
+                        detail=err.strip() or '设备端测速命令返回失败。'
+                        raise UserError(detail[:500])
                     result[mode]=parse_result(raw)
                     if code: raise UserError('测试未正常完成。')
             except UserError as exc:

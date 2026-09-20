@@ -153,7 +153,7 @@ class TrafficPanel(QFrame):
         if not self.owner.ask('开始公网测速' if public else '开始网速测试',message): return
         serial=self.owner.serial; generation=self.generation; port=self.port.value()
         self.speed_busy=True; self.start.setEnabled(False); self.mode.setEnabled(False)
-        self.result.setText('正在测速… 最多约 100 秒。' if public else '正在测速… 最多约 35 秒，实时流量继续更新。')
+        self.result.setText('正在测速… 最多约 180 秒。' if public else '正在测速… 最多约 35 秒，实时流量继续更新。')
         def done(data,error):
             self.speed_busy=False; self.start.setEnabled(True); self.mode.setEnabled(True)
             if serial!=self.owner.serial or generation!=self.generation:

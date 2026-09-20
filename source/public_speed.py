@@ -33,7 +33,11 @@ def parse_result(raw):
     except (ValueError,AttributeError,TypeError): raise UserError('测速节点没有返回有效的完整结果。')
 
 
-def public_speed_test(adb,serial,interface,progress=None):
+def connectivity_test(adb,serial,interface='',progress=None):
+    return public_speed_test(adb,serial,interface,progress,probe_only=True)
+
+
+def public_speed_test(adb,serial,interface,progress=None,probe_only=False):
     progress=progress or (lambda message:None)
     if interface and not re.fullmatch(r'[A-Za-z0-9_.:-]{1,32}',interface): raise UserError('请选择有效网卡。')
     q=shlex.quote
@@ -73,6 +77,12 @@ ip -o -4 addr show dev "$dev"
                    and type(n.get('latency_ms')) in (int,float) and math.isfinite(n['latency_ms']) and 0<=n['latency_ms']<4000]
             nodes.sort(key=lambda n:n['latency_ms'])
         except (ValueError,TypeError): raise UserError('国内节点检测结果无效。')
+        if probe_only:
+            reachable={n['index']:n['latency_ms'] for n in nodes}
+            return {'interface':interface,'nodes':[
+                {'name':name,'target':f'{host}:{port}','latency_ms':reachable.get(i),
+                 'reachable':i in reachable}
+                for i,(name,host,port) in enumerate(NODES)]}
         if not nodes: raise UserError('公网测速节点暂时均不可达。请检查泰山派外网连接，或稍后重试。')
         errors=[]
         for n in nodes:

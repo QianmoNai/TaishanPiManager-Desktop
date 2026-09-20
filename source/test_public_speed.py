@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import Mock,patch
 from adb_core import UserError
-from public_speed import public_speed_test,parse_result,NODES
+from public_speed import public_speed_test,connectivity_test,parse_result,NODES
 import test_desktop
 
 GOOD={'mbps':8,'bytes':1000000,'seconds':1}
@@ -21,6 +21,18 @@ class FakeAdb:
         return b'','',0
 
 class PublicSpeedTests(unittest.TestCase):
+    def test_connectivity_returns_all_nodes_without_transfers(self):
+        adb=FakeAdb(); result=connectivity_test(adb,'usb')
+        self.assertEqual(len(result['nodes']),len(NODES))
+        self.assertEqual(result['nodes'][0]['latency_ms'],10)
+        self.assertFalse(result['nodes'][-1]['reachable'])
+        self.assertIsNone(result['nodes'][-1]['latency_ms'])
+        self.assertFalse(any(' download ' in c or ' upload ' in c for c in adb.commands))
+        self.assertTrue(adb.commands[-1].startswith('rm -f'))
+
+    def test_connectivity_all_unreachable_is_valid_result(self):
+        result=connectivity_test(FakeAdb(nodes=[]),'usb')
+        self.assertTrue(all(not n['reachable'] for n in result['nodes']))
     def test_probe_failure_reports_board_diagnostic(self):
         class FailingProbeAdb(FakeAdb):
             def shell(self,serial,cmd,**kw):
@@ -59,6 +71,22 @@ class PublicSpeedTests(unittest.TestCase):
             with self.assertRaises(UserError):parse_result(json.dumps(sample).encode())
 
 class PublicUiTests(unittest.TestCase):
+    def test_connectivity_table_and_reset(self):
+        from PySide6.QtTest import QTest
+        self.connect_fake(); panel=self.window.traffic; panel.timer.stop()
+        result=connectivity_test(FakeAdb(),'usb')
+        with patch('traffic_widget.connectivity_test',return_value=result):
+            panel.test_connectivity()
+            for _ in range(200):
+                QTest.qWait(10)
+                if not panel.connectivity_busy: break
+        self.assertFalse(panel.connectivity_busy)
+        self.assertEqual(panel.connectivity_table.item(0,3).text(),'10.0 ms')
+        self.assertEqual(panel.connectivity_table.item(9,3).text(),'—')
+        self.assertIn('2/10',panel.connectivity_hint.text())
+        panel.reset()
+        self.assertEqual(panel.connectivity_table.item(0,3).text(),'—')
+
     setUpClass=classmethod(test_desktop.DesktopTests.setUpClass.__func__)
     setUp=test_desktop.DesktopTests.setUp
     tearDown=test_desktop.DesktopTests.tearDown
@@ -67,7 +95,7 @@ class PublicUiTests(unittest.TestCase):
     def test_public_mode_hides_custom_address_and_can_run_without_monitor(self):
         from PySide6.QtTest import QTest
         self.connect_fake();panel=self.window.traffic;panel.timer.stop();panel.mode.setCurrentIndex(2)
-        self.assertTrue(panel.host.isHidden());self.assertIn('国内',panel.mode.currentText())
+        self.assertTrue(panel.host.isHidden());self.assertEqual('一键公网测速',panel.mode.currentText())
         result={'node':'上海 · 中国联通','target':'mobile.shunicomtest.com:8080','interface':'wlan0','latency_ms':20,'download':GOOD,'upload':GOOD}
         with patch.object(self.window,'ask',return_value=True),patch('traffic_widget.public_speed_test',return_value=result) as run:
             panel.test_speed()

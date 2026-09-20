@@ -199,4 +199,80 @@ class ControllerHttpTests(unittest.TestCase):
             self.assertEqual(sum('--remove' in c for c in adb.calls),2)
         finally: server.shutdown(); server.server_close(); thread.join()
 
+
+
+class SubscriptionTests(unittest.TestCase):
+    def test_download_redirect_errors_limits_and_privacy(self):
+        from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self,*args): pass
+            def do_GET(self):
+                if self.path=='/redirect':
+                    self.send_response(302); self.send_header('Location','/config'); self.end_headers(); return
+                if self.path.startswith('/fail'):
+                    self.send_response(403); self.end_headers(); return
+                self.send_response(200); self.end_headers()
+                self.wfile.write(b'x'*(4*1024*1024+1) if self.path=='/large' else b'rules: [MATCH,DIRECT]')
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler); thread=threading.Thread(target=server.serve_forever,daemon=True); thread.start()
+        base=f'http://127.0.0.1:{server.server_port}'
+        try:
+            self.assertIn(b'rules:',proxy.download_subscription(base+'/redirect'))
+            with self.assertRaises(UserError) as error: proxy.download_subscription(base+'/fail?token=private-example')
+            self.assertNotIn('private-example',str(error.exception))
+            with self.assertRaisesRegex(UserError,'4 MB'): proxy.download_subscription(base+'/large')
+            for url in ('file:///etc/passwd','http://[broken','https://user:password@host'):
+                with self.assertRaises(UserError): proxy.download_subscription(url)
+        finally: server.shutdown(); server.server_close(); thread.join()
+
+    def test_import_link_runs_existing_validation_and_preserves_active_config(self):
+        adb=FakeAdb()
+        with patch.object(proxy,'download_subscription',return_value=b'rules: [MATCH,DIRECT]') as download:
+            with self.assertRaisesRegex(UserError,'原配置未修改'): proxy.import_config(adb,'usb',{'url':'https://example.invalid/config'})
+            download.assert_called_once()
+        self.assertFalse(any('mv ' in s for s in adb.scripts))
+        with patch.object(proxy,'status',return_value={'state':'running'}),patch.object(proxy,'download_subscription') as download:
+            with self.assertRaisesRegex(UserError,'先停止'): proxy.import_config(adb,'usb',{'url':'https://example.invalid/config'})
+            download.assert_not_called()
+
+class StableProxyUiTests(ProxyUiTests):
+    def populate(self):
+        w=self.window; w.go(4,False); w.open_proxy(); w.serial='test-usb'; w.banner.hide()
+        p=w.proxy; names=[f'node-{i:02d}' for i in range(60)]
+        p.render({'groups':[{'name':'pick','type':'Selector','now':names[0],'all':names}],'nodes':{n:{'type':'SS'} for n in names}})
+        QTest.qWait(80); return p,names
+
+    def test_batches_retain_cards_focus_scroll_and_order(self):
+        p,names=self.populate(); w=self.window; p.sort.setCurrentIndex(1)
+        def dispatch(path,data):
+            time.sleep(.04)
+            return {'delays':{n:{'state':'ok','delay':60-int(n[-2:])} for n in data['names']}}
+        self.api.dispatch=dispatch
+        focused=p.grid.cards[30]; focused.setFocus(); p.start_tests(); QTest.qWait(10)
+        bar=w.stack.widget(4).verticalScrollBar(); bar.setValue(600); before=bar.value()
+        cards=list(p.grid.cards)
+        for _ in range(400):
+            QTest.qWait(10); time.sleep(.001)
+            self.assertEqual(p.grid.cards,cards)
+            self.assertEqual(bar.value(),before)
+            self.assertEqual(w.stack.currentIndex(),4)
+            if not p.testing and not w.busy: break
+        self.assertFalse(p.testing); self.assertEqual(p.tested,60)
+        self.assertIs(self.app.focusWidget(),focused)
+        self.assertEqual([c.name for c in p.grid.cards],names)
+
+    def test_click_lower_card_keeps_position(self):
+        p,names=self.populate(); w=self.window; card=p.grid.cards[30]
+        card.setFocus(); QTest.qWait(20); bar=w.stack.widget(4).verticalScrollBar(); before=bar.value()
+        card.click(); self.wait_idle(); QTest.qWait(20)
+        self.assertIs(p.grid.cards[30],card); self.assertTrue(card.property('selected'))
+        self.assertEqual(bar.value(),before); self.assertIs(self.app.focusWidget(),card)
+
+    def test_subscription_button_payload_and_clear_on_success(self):
+        p,names=self.populate(); p.subscription_url.setText('https://example.invalid/config?token=synthetic')
+        with patch.object(self.window,'work') as work:
+            p.import_subscription(); fn,done,_=work.call_args.args; fn()
+            self.assertEqual(self.api.calls[-1][1]['url'],'https://example.invalid/config?token=synthetic')
+            done({'state':'stopped','configured':True})
+        self.assertEqual(p.subscription_url.text(),'')
+
 if __name__=='__main__': unittest.main()

@@ -120,12 +120,44 @@ def normalize_config(raw, allow_lan=False):
     return config
 
 
+def download_subscription(url):
+    """Fetch a Clash configuration without logging or persisting the subscription URL."""
+    def validate(value):
+        try:
+            parts=urllib.parse.urlsplit(value)
+            valid=parts.scheme in ('http','https') and parts.hostname and not parts.username and not parts.password
+        except (ValueError,TypeError): valid=False
+        if not valid: raise UserError('请输入有效的 HTTP/HTTPS 订阅配置链接。')
+    if not isinstance(url,str) or len(url)>8192: raise UserError('订阅链接无效。')
+    url=url.strip(); validate(url)
+    class Redirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,req,fp,code,msg,headers,newurl):
+            validate(newurl)
+            return super().redirect_request(req,fp,code,msg,headers,newurl)
+    try:
+        req=urllib.request.Request(url,headers={'User-Agent':'clash.meta','Accept':'application/yaml, application/json, text/yaml, text/plain, */*'})
+        with urllib.request.build_opener(Redirect()).open(req,timeout=20) as response:
+            raw=response.read(4*1024*1024+1)
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        raise UserError('订阅下载失败，请检查链接有效期、网络连接及服务端状态。') from None
+    except Exception:
+        raise UserError('订阅下载失败，请检查链接有效期、网络连接及服务端状态。') from None
+    if len(raw)>4*1024*1024: raise UserError('订阅配置不能超过 4 MB。')
+    if not raw.strip(): raise UserError('订阅返回空内容。')
+    return raw
+
+
 def import_config(adb, serial, data):
     owned(adb, serial)
     if status(adb, serial)['state'] == 'running': raise UserError('请先停止代理，再导入新配置。')
-    path = Path(data.get('filename', ''))
-    if not path.is_file() or path.stat().st_size > 4*1024*1024: raise UserError('请选择不超过 4 MB 的配置文件。')
-    config = normalize_config(path.read_bytes(), data.get('allow_lan') is True)
+    if 'url' in data:
+        raw=download_subscription(data['url'])
+    else:
+        path = Path(data.get('filename', ''))
+        if not path.is_file() or path.stat().st_size > 4*1024*1024: raise UserError('请选择不超过 4 MB 的配置文件。')
+        raw=path.read_bytes()
+    config = normalize_config(raw, data.get('allow_lan') is True)
     stage = BASE + '/import-' + secrets.token_hex(8)
     adb.shell(serial, f'umask 077; mkdir {stage}')
     try:
@@ -170,6 +202,7 @@ def controller_session(adb, serial):
                 body = response.read(4*1024*1024)
             return json.loads(body) if body else {}
         except urllib.error.HTTPError as exc:
+            exc.close()
             if '/delay?' in path and exc.code in (503,504): raise DelayUnavailable() from None
             raise UserError('代理控制接口请求失败，请刷新状态或检查核心。') from None
         except Exception: raise UserError('代理控制接口连接失败，请检查 ADB 和核心状态。') from None

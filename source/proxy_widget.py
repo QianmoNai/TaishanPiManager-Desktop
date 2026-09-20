@@ -20,12 +20,22 @@ class NodeCard(QPushButton):
         self.tags=label(tags,'caption'); self.tags.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred); self.tags.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents); row.addWidget(self.tags,1)
         self.delay=label('','nodeDelay'); self.delay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents); row.addWidget(self.delay)
         test=button('测试',lambda:self.probe.emit(name)); test.setObjectName('nodeTest'); test.setMinimumHeight(24); test.setMaximumHeight(26); test.setFixedWidth(45); row.addWidget(test); box.addLayout(row)
+        self.update_node(meta,selected,result)
+
+    def update_node(self,meta,selected,result):
+        self.setProperty('selected',selected)
+        self.setAccessibleName(self.name+('，当前节点' if selected else ''))
+        tags=str(meta.get('type','Unknown'))+(' · UDP' if meta.get('udp') else '')
+        self.tags.setText(tags)
         state=result.get('state','untested'); value=result.get('delay')
         text={'untested':'未测试','testing':'测试中…','failed':'不可达','policy':'拦截策略'}.get(state,f'{value} ms')
         self.delay.setText(text)
         tone='good' if state=='ok' and value<200 else 'slow' if state=='ok' else 'bad' if state=='failed' else 'muted'
         self.delay.setProperty('tone',tone)
-        self.setToolTip(name+'\n'+tags+'\n'+text+(' · '+result['time'] if result.get('time') else '')+('\n当前选中' if selected else ''))
+        self.setToolTip(self.name+'\n'+tags+'\n'+text+(' · '+result['time'] if result.get('time') else '')+('\n当前选中' if selected else ''))
+
+        for widget in (self,self.delay):
+            widget.style().unpolish(widget); widget.style().polish(widget); widget.update()
 
     def resizeEvent(self,event):
         super().resizeEvent(event)
@@ -39,7 +49,8 @@ class NodeGrid(QWidget):
 
     def replace(self,cards):
         while self.box.count(): self.box.takeAt(0)
-        for card in self.cards: card.deleteLater()
+        for card in self.cards:
+            if card not in cards: card.hide(); card.deleteLater()
         self.cards=cards; self.columns=0; self.reflow()
 
     def reflow(self):
@@ -73,7 +84,7 @@ class ProxyPanel(QWidget):
         self.test_all=button('测试当前组',self.start_tests,'primary'); row.addWidget(self.test_all); self.controls.append(self.test_all)
         self.cancel=button('取消',self.cancel_tests); self.cancel.hide(); row.addWidget(self.cancel); box.addLayout(row)
         row=QHBoxLayout(); self.search=QLineEdit(); self.search.setPlaceholderText('搜索节点名称 / 协议'); self.search.setClearButtonEnabled(True); self.search.textChanged.connect(self.draw_nodes); row.addWidget(self.search,1)
-        self.sort=QComboBox(); self.sort.addItems(['配置顺序','延迟从低到高','名称排序']); self.sort.currentIndexChanged.connect(self.draw_nodes); row.addWidget(self.sort); self.controls.extend([self.search,self.sort]); box.addLayout(row)
+        self.sort=QComboBox(); self.sort.addItems(['配置顺序','延迟从低到高','名称排序']); self.sort.currentIndexChanged.connect(self.draw_nodes); self.sort.activated.connect(self.draw_nodes); row.addWidget(self.sort); self.controls.extend([self.search,self.sort]); box.addLayout(row)
         self.group_hint=label('启动代理后自动读取策略组。','caption',True); box.addWidget(self.group_hint)
         self.progress=label('','caption'); self.progress.hide(); box.addWidget(self.progress)
         self.grid=NodeGrid(); box.addWidget(self.grid); self.controls.append(self.grid)
@@ -89,7 +100,10 @@ class ProxyPanel(QWidget):
         box.addLayout(row)
         row=QHBoxLayout(); self.autostart=QCheckBox('开机自动启动'); self.autostart.clicked.connect(lambda checked:self.action('enable' if checked else 'disable')); row.addWidget(self.autostart); self.controls.append(self.autostart)
         self.allow_lan=QCheckBox('导入时允许局域网访问'); row.addWidget(self.allow_lan); self.controls.append(self.allow_lan)
-        btn=button('导入配置',self.import_file,'primary'); row.addWidget(btn); self.controls.append(btn); box.addLayout(row)
+        btn=button('导入本地文件',self.import_file,'primary'); row.addWidget(btn); self.controls.append(btn); box.addLayout(row)
+        row=QHBoxLayout(); self.subscription_url=QLineEdit(); self.subscription_url.setPlaceholderText('粘贴 Clash / Mihomo 订阅配置链接（HTTP / HTTPS）'); self.subscription_url.setClearButtonEnabled(True); row.addWidget(self.subscription_url,1)
+        btn=button('从链接导入',self.import_subscription,'primary'); row.addWidget(btn); self.controls.extend([self.subscription_url,btn]); box.addLayout(row)
+        box.addWidget(label('由电脑下载订阅配置并交给核心校验；支持 YAML / JSON 配置链接，不支持仅返回 Base64 节点列表的订阅。链接不会保存，导入成功后清空。','caption',True))
         box.addWidget(label('导入前请停止服务。支持 Clash/Mihomo YAML、JSON；默认只供泰山派本机使用，局域网访问需在客户端手动设置代理。此版本不接管 TUN 或 DNS。','caption',True)); management.addWidget(frame); self.management.hide()
 
     def hideEvent(self,event):
@@ -99,7 +113,7 @@ class ProxyPanel(QWidget):
         self.management.setVisible(not self.management.isVisible()); self.management_toggle.setText('配置与服务管理 ▾' if self.management.isVisible() else '配置与服务管理 ▸')
 
     def reset(self):
-        self.cancel_tests(); self.epoch+=1; self.groups=[]; self.metadata={}; self.delays={}; self.group.clear(); self.grid.replace([]); self.search.clear(); self.autostart.setChecked(False); self.allow_lan.setChecked(False); self.mode.setCurrentIndex(0)
+        self.cancel_tests(); self.epoch+=1; self.groups=[]; self.metadata={}; self.delays={}; self.group.clear(); self.grid.replace([]); self.search.clear(); self.autostart.setChecked(False); self.allow_lan.setChecked(False); self.subscription_url.clear(); self.mode.setCurrentIndex(0)
         self.state.setText('连接设备后查看状态。'); self.result.setText('安装核心并导入配置后，启动服务即可显示节点。'); self.progress.hide(); self.draw_nodes()
 
     def current_group(self):
@@ -109,7 +123,7 @@ class ProxyPanel(QWidget):
         if 'state' in data:
             state=data['state']; titles={'missing':'未安装','running':'运行中','stopped':'已停止','error':'检测失败','offline':'未连接'}
             self.state.setText(titles.get(state,'待检测')+' · '+('已有配置' if data.get('configured') else '未配置'))
-            self.autostart.setChecked(data.get('autostart',False)); self.owner.plugin_center.render_proxy(data)
+            self.saved_autostart=data.get('autostart',False); self.autostart.setChecked(self.saved_autostart); self.owner.plugin_center.render_proxy(data)
             if state!='running':
                 self.cancel_tests(); self.groups=[]; self.group.clear(); self.metadata={}; self.delays={}; self.draw_nodes()
             if state=='missing' or not data.get('configured'):
@@ -133,16 +147,22 @@ class ProxyPanel(QWidget):
         if meta.get('tested'): return {'state':'ok' if meta.get('alive') else 'failed','delay':meta.get('delay'),'time':meta.get('time','')}
         return {'state':'untested'}
 
-    def draw_nodes(self,*args):
+    def draw_nodes(self,*args,refresh_only=False):
         group=self.current_group(); names=list(dict.fromkeys(group.get('all',[]))); query=self.search.text().strip().casefold()
         shown=[n for n in names if query in (n+' '+self.metadata.get(n,{}).get('type','')).casefold()]
         if self.sort.currentIndex()==1: shown.sort(key=lambda n:(self.node_result(n).get('state')!='ok',self.node_result(n).get('delay') or float('inf')))
         elif self.sort.currentIndex()==2: shown.sort(key=str.casefold)
+        existing={c.name:c for c in self.grid.cards}
+        if refresh_only and set(shown)==set(existing): shown=[c.name for c in self.grid.cards]
         cards=[]
         for name in shown:
-            card=NodeCard(name,self.metadata.get(name,{}),name==group.get('now'),self.node_result(name),self.label,self.button,self.grid)
-            card.chosen.connect(self.select_node); card.probe.connect(lambda n:self.start_tests([n])); cards.append(card)
-        self.grid.replace(cards)
+            card=existing.get(name)
+            if card is None:
+                card=NodeCard(name,self.metadata.get(name,{}),name==group.get('now'),self.node_result(name),self.label,self.button,self.grid)
+                card.chosen.connect(self.select_node); card.probe.connect(lambda n:self.start_tests([n]))
+            else: card.update_node(self.metadata.get(name,{}),name==group.get('now'),self.node_result(name))
+            cards.append(card)
+        if cards!=self.grid.cards: self.grid.replace(cards)
         self.empty.setVisible(not shown); self.empty.setText('没有匹配的节点。' if names else '暂无节点，请启动代理后刷新。')
         tip='点击节点卡片即可切换。' if group.get('type')=='Selector' else '此策略组由核心自动选择，支持测试但不能手动切换。'
         if self.mode.currentData()=='direct': tip='当前为直连模式；切换为规则或全局模式后才会使用所选代理。'
@@ -150,7 +170,9 @@ class ProxyPanel(QWidget):
 
     def action(self,action,data=None):
         owner=self.owner
-        if not owner.require_device() or owner.busy or self.testing: return
+        if not owner.require_device() or owner.busy or self.testing:
+            if action in ('enable','disable'): self.autostart.setChecked(getattr(self,'saved_autostart',False))
+            return
         if action=='install' and not owner.ask('安装网络代理','将安装官方 Mihomo ARM64 核心及服务脚本。安装后需导入配置，不会自动启动。'): return
         if action=='uninstall' and not owner.ask('卸载网络代理','将停止代理并移除开机入口，配置和核心保留在设备备份目录。'): return
         if action=='install': data={'confirm':True}
@@ -158,10 +180,11 @@ class ProxyPanel(QWidget):
         def done(result):
             if owner.serial!=serial: return
             self.render(result)
+            if action=='import' and data and 'url' in data: self.subscription_url.clear()
             if action=='select':
                 for g in self.groups:
                     if g['name']==data['group']: g['now']=data['node']
-                self.draw_nodes()
+                self.draw_nodes(refresh_only=True)
             if action in ('start','restart','mode') or (action=='status' and result.get('state')=='running'):
                 QTimer.singleShot(0,lambda:self.action('groups') if owner.serial==serial and self.isVisible() else None)
         owner.work(lambda:owner.api.dispatch('/api/proxy-'+action,{'serial':serial,**(data or {})}),done,'正在处理网络代理…')
@@ -170,6 +193,12 @@ class ProxyPanel(QWidget):
         if not self.owner.require_device() or self.owner.busy or self.testing: return
         name,_=QFileDialog.getOpenFileName(self,'导入 Clash/Mihomo 配置','','代理配置 (*.yaml *.yml *.json);;所有文件 (*)')
         if name: self.action('import',{'filename':name,'allow_lan':self.allow_lan.isChecked()})
+
+    def import_subscription(self):
+        if not self.owner.require_device() or self.owner.busy or self.testing: return
+        url=self.subscription_url.text().strip()
+        if not url: self.result.setText('请先粘贴订阅配置链接。'); return
+        self.action('import',{'url':url,'allow_lan':self.allow_lan.isChecked()})
 
     def select_node(self,name):
         group=self.current_group()
@@ -192,10 +221,10 @@ class ProxyPanel(QWidget):
             self.testing=False; self.cancel.hide(); self.progress.setText(f'测试完成：{self.tested} / {self.total} · '+self.test_endpoint); return
         before={n:self.delays.get(n) for n in batch}
         for n in batch: self.delays[n]={'state':'testing'}
-        self.draw_nodes(); self.progress.setText(f'正在测试 {self.tested} / {self.total} · 每批最多 4 个节点')
+        self.draw_nodes(refresh_only=True); self.progress.setText(f'正在测试 {self.tested} / {self.total} · 每批最多 4 个节点')
         def completed(result):
             if epoch!=self.epoch or self.owner.serial!=self.test_serial: return
-            self.delays.update(result['delays']); self.tested+=len(batch); self.draw_nodes()
+            self.delays.update(result['delays']); self.tested+=len(batch); self.draw_nodes(refresh_only=True)
             if self.testing: QTimer.singleShot(0,lambda:self.next_batch(epoch))
             else: self.progress.setText(f'已取消 · 已完成 {self.tested} / {self.total}')
         def failed(error):
@@ -203,7 +232,7 @@ class ProxyPanel(QWidget):
             for n,old in before.items():
                 if old is None: self.delays.pop(n,None)
                 else: self.delays[n]=old
-            self.cancel_tests(); self.draw_nodes(); self.progress.setText('测试中断：控制连接异常或测速地址无效，请检查提示。')
+            self.cancel_tests(); self.draw_nodes(refresh_only=True); self.progress.setText('测试中断：控制连接异常或测速地址无效，请检查提示。')
         serial=self.test_serial; endpoint=self.test_endpoint
         self.owner.work(lambda:self.owner.api.dispatch('/api/proxy-delay',{'serial':serial,'names':batch,'url':endpoint}),completed,'正在测试节点连通性…')
         self.owner.job.signals.error.connect(failed)

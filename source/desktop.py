@@ -200,7 +200,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.15','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.16','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -280,7 +280,6 @@ class Window(QMainWindow):
         page=QWidget(); page.setObjectName('page'); box=QVBoxLayout(page); box.setContentsMargins(0,0,0,0); box.setSpacing(12); self.stack.addWidget(page)
         row=QHBoxLayout(); self.terminal_status=label('未连接终端','subtle'); row.addWidget(self.terminal_status,1)
         self.terminal_size=label('','caption'); row.addWidget(self.terminal_size)
-        self.terminal_start=button('连接终端',self.start_terminal,'primary'); row.addWidget(self.terminal_start)
         self.terminal_stop=button('断开',self.stop_terminal); self.terminal_stop.setEnabled(False); row.addWidget(self.terminal_stop); box.addLayout(row)
         tab_row=QHBoxLayout(); tab_row.addWidget(label('终端标签页','section')); tab_row.addStretch()
         tab_row.addWidget(button('新建标签页',self.new_terminal_tab)); tab_row.addWidget(button('关闭当前标签页',self.close_current_terminal_tab)); box.addLayout(tab_row)
@@ -289,7 +288,7 @@ class Window(QMainWindow):
         row=QHBoxLayout(); row.addWidget(button('中断 Ctrl+C',lambda:self.terminal.send(b'\x03')))
         row.addWidget(button('复制选中',lambda:self.terminal.copy_selection())); row.addWidget(button('粘贴',lambda:self.terminal.paste())); row.addWidget(button('清空显示',lambda:self.terminal.clear_screen())); row.addStretch(); box.addLayout(row)
         box.addWidget(label('Enter 执行 · ↑↓ 历史 · Tab 补全 · Ctrl+Shift+C / V 复制粘贴 · 滚轮查看历史','caption',True))
-        box.addWidget(label('每个标签页是独立 ADB Shell 会话，可同时连接多个终端。切换设备会关闭全部会话；后台程序可能继续运行。','caption',True))
+        box.addWidget(label('选择设备后标签页自动连接；新建标签页也会自动连接。每个标签页是独立 ADB Shell 会话，可同时连接多个终端。切换设备会关闭全部会话；后台程序可能继续运行。','caption',True))
 
     def new_terminal_tab(self):
         term=Terminal(); term.setMinimumHeight(200); self.terminals.append(term)
@@ -298,12 +297,14 @@ class Window(QMainWindow):
         term.connectionChanged.connect(lambda connected,message,t=term:self.terminal_state(connected,message,t))
         term.sizeChanged.connect(lambda cols,rows,t=term:self.terminal_size_changed(cols,rows,t))
         self.current_terminal_changed(index)
+        if self.serial and self.api.adb.path:
+            QTimer.singleShot(0,lambda t=term:t.connect_device(self.api.adb.path,self.serial))
 
     def current_terminal_changed(self,index):
         if not hasattr(self,'terminal_tabs') or index<0: return
         self.terminal=self.terminal_tabs.widget(index); self.terminal_status.setText(('已连接 · '+self.terminal.serial) if self.terminal.connected else '未连接终端')
         self.terminal_size.setText(f'{self.terminal.screen.columns} × {self.terminal.screen.lines}')
-        self.terminal_start.setEnabled(not self.terminal.connected); self.terminal_stop.setEnabled(self.terminal.connected); self.terminal.setFocus()
+        self.terminal_stop.setEnabled(self.terminal.connected); self.terminal.setFocus()
 
     def terminal_size_changed(self,cols,rows,term):
         if term is self.terminal: self.terminal_size.setText(f'{cols} × {rows}')
@@ -318,16 +319,12 @@ class Window(QMainWindow):
 
     def close_current_terminal_tab(self): self.close_terminal_tab(self.terminal_tabs.currentIndex())
 
-    def start_terminal(self):
-        if not self.require_device(): return
-        self.terminal.connect_device(self.api.adb.path,self.serial)
-
     def terminal_state(self,connected,message,term=None):
         term=term or self.terminal; index=self.terminal_tabs.indexOf(term)
         if index>=0:
             self.terminal_tabs.setTabText(index,('● ' if connected else '')+term.tab_title)
             self.terminal_tabs.setTabToolTip(index,message)
-        if term is self.terminal: self.terminal_status.setText(message); self.terminal_start.setEnabled(not connected); self.terminal_stop.setEnabled(connected)
+        if term is self.terminal: self.terminal_status.setText(message); self.terminal_stop.setEnabled(connected)
 
     def stop_terminal(self):
         if self.terminal.connected and not self.ask('断开终端','当前终端会话将结束，前台任务可能被中断。后台任务不保证停止。'): return
@@ -556,6 +553,9 @@ class Window(QMainWindow):
             if not self.ask('切换设备','切换设备会关闭全部终端会话，是否继续？'):
                 self.device_select.blockSignals(True); self.device_select.setCurrentIndex(max(0,self.device_select.findData(self.serial))); self.device_select.blockSignals(False); return
         if selected!=self.serial: self.serial=selected; self.reset_data()
+        if self.serial:
+            for term in self.terminals:
+                if not term.is_active(): term.connect_device(self.api.adb.path,self.serial)
         self.set_badge(bool(self.serial),'已连接' if self.serial else '未连接')
         if self.serial:
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)

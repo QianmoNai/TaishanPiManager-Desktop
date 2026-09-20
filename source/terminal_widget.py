@@ -71,7 +71,7 @@ class Terminal(QAbstractScrollArea):
         self.verticalScrollBar().valueChanged.connect(lambda:self.viewport().update())
         self.repaint_timer=QTimer(self); self.repaint_timer.setInterval(33); self.repaint_timer.timeout.connect(self.refresh_display)
         self.changed=True; self.repaint_timer.start()
-        self.feed('泰山派交互终端\r\n选择设备后点击「连接终端」。\r\n')
+        self.feed('泰山派交互终端\r\n选择设备后会自动建立会话。\r\n')
 
     def is_active(self):
         return self.connected or self.process.state()!=QProcess.ProcessState.NotRunning

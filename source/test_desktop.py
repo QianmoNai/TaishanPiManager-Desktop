@@ -13,6 +13,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from desktop import Window, STYLE, configure_app
 from adb_core import App, Adb, UserError, remote_path
+from terminal_widget import Terminal
 
 
 SAMPLE={'hostname':'taishanpi','os':'Buildroot 2024.02','kernel':'Linux 6.1.141 · aarch64','uptime':96500,
@@ -52,7 +53,8 @@ class DesktopTests(unittest.TestCase):
         self.fail('Background operation never completed')
 
     def connect_fake(self):
-        self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}]); QTest.qWait(30); self.wait_idle()
+        with patch.object(Terminal,'connect_device'):
+            self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}]); QTest.qWait(30); self.wait_idle()
 
     def test_empty_device_and_all_pages(self):
         self.window.render_devices([])
@@ -80,8 +82,7 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.window.terminal_tabs.count(),1)
         self.window.new_terminal_tab(); self.assertEqual(self.window.terminal_tabs.count(),2)
         self.window.close_current_terminal_tab(); self.assertEqual(self.window.terminal_tabs.count(),1)
-        with patch.object(self.window.terminal,'connect_device') as connect:
-            self.window.start_terminal(); connect.assert_called_once_with(self.api.adb.path,'usb-test')
+        self.assertFalse(hasattr(self.window,'terminal_start'))
 
     def test_terminal_tab_isolation_controls_and_close(self):
         from PySide6.QtWidgets import QPushButton
@@ -101,6 +102,16 @@ class DesktopTests(unittest.TestCase):
         self.window.close_current_terminal_tab()
         self.assertEqual(self.window.terminal_tabs.count(),1)
         self.assertIsNot(self.window.terminal,first)
+
+    def test_terminal_tabs_auto_connect_when_device_is_selected(self):
+        self.api.adb.path='test-adb'
+        with patch.object(self.window.terminal,'connect_device') as connect:
+            self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}])
+            QTest.qWait(20)
+            connect.assert_called_with(self.api.adb.path,'usb-test')
+        with patch.object(Terminal,'connect_device') as connect:
+            self.window.new_terminal_tab(); QTest.qWait(20)
+            self.assertTrue(connect.called)
 
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))

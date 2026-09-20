@@ -29,6 +29,8 @@ class WifiBackendTests(unittest.TestCase):
         self.assertIn('update_config=0',config)
         self.assertIn('psk=a1b2c3',config)
         self.assertIn('/userdata/etc/tspi-wifi.conf',helper)
+        self.assertIn('CONF=/etc/wpa_supplicant.conf',helper)
+        self.assertNotIn('wpa_cli -p "$CTRL" -i "$IFACE" terminate',helper)
         self.assertIn('wpa_supplicant -B',helper)
         self.assertIn('/etc/init.d/S40tspi-wifi',init) if False else self.assertIn('start)',init)
 
@@ -59,6 +61,8 @@ class WifiBackendTests(unittest.TestCase):
         self.assertIn('save_config',script)
         self.assertIn('priority 100',script)
         self.assertIn('/userdata/etc/tspi-wifi.conf',script)
+        self.assertIn('/etc/.tspi-wifi.conf.tmp',script)
+        self.assertIn('/etc/wpa_supplicant.conf',script)
         self.assertIn('/userdata/bin/tspi-wifi-autostart',script)
         self.assertIn('/etc/init.d/S40tspi-wifi',script)
         self.assertIn('尚未获取',result['message'])

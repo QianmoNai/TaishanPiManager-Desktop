@@ -22,6 +22,7 @@ from adb_core import Adb, App, UserError, MAX_TRANSFER, remote_path
 from terminal_widget import Terminal
 from traffic_widget import TrafficPanel
 from plugin_center import PluginCenter
+from network_status import NETWORK_STATUS_COMMAND, parse_network_status
 
 ICONS = {
     'wifi': '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
@@ -201,7 +202,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.20','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.21','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -387,10 +388,14 @@ class Window(QMainWindow):
 
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
-        layout=self.scroll_page(); frame,box=card()
+        layout=self.scroll_page()
         frame,box=card(); row=QHBoxLayout(); row.addWidget(label('网络设置','title')); row.addStretch(); self.net_status_btn=button('刷新网络状态',self.refresh_network_status,symbol='refresh'); row.addWidget(self.net_status_btn); box.addLayout(row)
         self.net_summary=label('连接设备后查看 Wi-Fi、USB 网卡和默认路由。','subtle',True); box.addWidget(self.net_summary)
         self.net_table=QTableWidget(0,5); self.net_table.setHorizontalHeaderLabels(['接口','类型','链路','IPv4 地址','默认路由']); self.net_table.verticalHeader().hide(); self.net_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.net_table.setMinimumHeight(150); box.addWidget(self.net_table); layout.addWidget(frame)
+        self.net_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.net_table.verticalHeader().setDefaultSectionSize(43)
+        self.net_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.net_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         frame,box=card(); row=QHBoxLayout(); row.addWidget(label('附近的 Wi-Fi','section')); row.addStretch()
         self.wifi_iface=QComboBox(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.setAccessibleName('无线网卡')
         self.wifi_iface.currentIndexChanged.connect(self.clear_wifi_selection); row.addWidget(self.wifi_iface)
@@ -447,23 +452,16 @@ class Window(QMainWindow):
     def refresh_network_status(self):
         if not self.require_device() or self.busy: return
         def done(raw):
-            text=raw.decode('utf-8','replace'); rows=[]
-            route=re.search(r'(?m)^default via (\S+) dev (\S+)',text); default=route.group(2) if route else ''
-            for line in text.splitlines():
-                fields=line.split(None,3)
-                if len(fields)<3 or fields[0]=='default': continue
-                iface,state,rest=fields[0],fields[1],fields[2:]
-                ip=rest[-1] if rest else '—'
-                kind='USB 网卡' if iface.startswith(('eth','enx')) and iface!='eth0' else ('Wi-Fi' if iface.startswith(('wl','wlan')) else '有线网卡')
-                rows.append((iface,kind,state,ip,'是' if iface==default else ''))
+            rows,default=parse_network_status(raw.decode('utf-8','replace'))
             self.net_table.setRowCount(len(rows))
             for r,row in enumerate(rows):
-                for c,value in enumerate(row): self.net_table.setItem(r,c,QTableWidgetItem(value))
+                for c,value in enumerate(row):
+                    item=QTableWidgetItem(value); item.setToolTip(value); self.net_table.setItem(r,c,item)
             if not rows: self.net_summary.setText('未检测到网络接口，请检查 USB 网卡、网线、Wi-Fi 驱动或设备连接。')
             elif not any(row[3] != '—' for row in rows): self.net_summary.setText('检测到网卡，但没有 IPv4 地址；请检查网线、DHCP 或 Wi-Fi 连接。')
             elif not default: self.net_summary.setText('网络接口已发现，但没有默认路由，当前可能无法访问局域网或互联网。')
             else: self.net_summary.setText(f'默认路由：{default} · USB 网卡通常为 eth1 或 enx…；支持 DHCP 自动获取地址。')
-        self.work(lambda:self.api.adb.shell(self.serial,"ip -br addr; echo; ip route",timeout=5)[0],done,'正在读取网络接口状态…')
+        self.work(lambda:self.api.adb.shell(self.serial,NETWORK_STATUS_COMMAND,timeout=5)[0],done,'正在读取网络接口状态…')
 
     def render_wifi_status(self,data):
         self.wifi_iface.blockSignals(True); self.wifi_iface.clear()
@@ -812,6 +810,7 @@ QPlainTextEdit#console { background: #f7f8fb; color: #44526a; }
 QProgressBar { background: #eef0f5; border: none; border-radius: 2px; }
 QProgressBar::chunk { background: #65a5ff; border-radius: 2px; }
 QTableWidget { border: none; background: white; gridline-color: #f0f1f5; selection-background-color: #edf4ff; selection-color: #0065d6; outline: none; }
+QHeaderView { background: #f6f7fa; }
 QHeaderView::section { background: #f6f7fa; padding: 12px; border: none; color: #8e8e95; font-size: 11px; font-weight: 500; }
 QTableWidget::item { padding: 6px; border-bottom: 1px solid #f2f3f6; }
 QScrollBar:vertical { background: transparent; width: 7px; margin: 2px; }
@@ -858,6 +857,7 @@ QPlainTextEdit, QPlainTextEdit#console { background: #1b1c21; color: #d0d8e5; bo
 QProgressBar { background: #35353e; }
 QProgressBar::chunk { background: #64aaff; }
 QTableWidget { background: #242428; color: #e3e3eb; gridline-color: #383840; selection-background-color: #233f63; selection-color: #c4dfff; }
+QHeaderView { background: #2c2c32; }
 QHeaderView::section { background: #2c2c32; color: #b1b1bb; }
 QTableWidget::item { border-bottom-color: #34343b; }
 QScrollBar::handle:vertical { background: #50505c; }

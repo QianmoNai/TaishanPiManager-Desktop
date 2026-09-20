@@ -108,7 +108,11 @@ ERRORS = {
 
 
 def persistent_wifi_files(interface, ssid_hex, mode, psk=''):
-    """Return the persistent config and boot helper for the selected network."""
+    """Return the persistent config and a safe fallback boot helper.
+
+    Buildroot's ifupdown starts wlan0 from /etc/wpa_supplicant.conf.  Keep the
+    legacy userdata copy for recovery, but make the system config authoritative.
+    """
     if mode == 'psk':
         network = f'''network={{
     ssid={ssid_hex.lower()}
@@ -127,14 +131,24 @@ def persistent_wifi_files(interface, ssid_hex, mode, psk=''):
     config = 'ctrl_interface=/var/run/wpa_supplicant\nupdate_config=0\n' + network
     helper = f'''#!/bin/sh
 IFACE={shlex.quote(interface)}
-CONF=/userdata/etc/tspi-wifi.conf
+[ -n "$IFACE" ] || IFACE=$(cat /userdata/etc/tspi-wifi.interface 2>/dev/null)
+[ -n "$IFACE" ] || IFACE=wlan0
+CONF=/etc/wpa_supplicant.conf
+LEGACY=/userdata/etc/tspi-wifi.conf
 CTRL=/var/run/wpa_supplicant
 mkdir -p "$CTRL" || exit 1
-# Replace any existing instance so the saved profile is loaded on boot.
-if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
-    wpa_cli -p "$CTRL" -i "$IFACE" terminate >/dev/null 2>&1 || true
-    sleep 1
-fi
+# ifupdown normally starts wpa_supplicant before this fallback hook.  Do not
+# terminate that process: doing so races with ifupdown and loses the profile.
+count=0
+while [ "$count" -lt 60 ]; do
+    if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
+        exit 0
+    fi
+    count=$((count+1)); sleep 1
+done
+[ -d "/sys/class/net/$IFACE" ] || exit 1
+[ -s "$CONF" ] || CONF="$LEGACY"
+[ -s "$CONF" ] || exit 1
 ip link set "$IFACE" up >/dev/null 2>&1 || exit 1
 wpa_supplicant -B -i "$IFACE" -c "$CONF" -C "$CTRL" >/dev/null 2>&1 || exit 1
 sleep 1
@@ -218,13 +232,20 @@ printf '@@status\n'; cli status
         else:
             credential = 'cli set_network "$new_id" key_mgmt NONE | grep -q "^OK$" || fail_setup\n'
         persistent_config, persistent_helper, persistent_init = persistent_wifi_files(self.interface, ssid_hex, mode, psk if mode == 'psk' else '')
-        persist = f'''mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
-printf %s {shlex.quote(persistent_config)} > /userdata/etc/tspi-wifi.conf || fail_save
-chmod 600 /userdata/etc/tspi-wifi.conf || fail_save
+        persist = f'''umask 077
+mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
+printf %s {shlex.quote(persistent_config)} > /userdata/etc/.tspi-wifi.conf.tmp || fail_save
+chmod 600 /userdata/etc/.tspi-wifi.conf.tmp || fail_save
+mv /userdata/etc/.tspi-wifi.conf.tmp /userdata/etc/tspi-wifi.conf || fail_save
+printf '%s\\n' "$iface" > /userdata/etc/tspi-wifi.interface || fail_save
+printf %s {shlex.quote(persistent_config)} > /etc/.tspi-wifi.conf.tmp || fail_save
+chmod 600 /etc/.tspi-wifi.conf.tmp || fail_save
+mv /etc/.tspi-wifi.conf.tmp /etc/wpa_supplicant.conf || fail_save
 printf %s {shlex.quote(persistent_helper)} > /userdata/bin/tspi-wifi-autostart || fail_save
 chmod 755 /userdata/bin/tspi-wifi-autostart || fail_save
 printf %s {shlex.quote(persistent_init)} > /etc/init.d/S40tspi-wifi || fail_save
 chmod 755 /etc/init.d/S40tspi-wifi || fail_save
+sync || fail_save
 '''
         script = self.prepare(True) + r'''
 old_id=$(cli status | sed -n 's/^id=//p')

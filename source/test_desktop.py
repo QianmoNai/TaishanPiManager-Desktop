@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication,QHeaderView
 from desktop import Window, STYLE, configure_app
 from adb_core import App, Adb, UserError, remote_path
 from terminal_widget import Terminal
@@ -128,6 +128,8 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.window.net_table.rowCount(),1)
         self.assertEqual(self.window.net_table.item(0,1).text(),'USB 网卡')
         self.assertEqual(self.window.net_table.item(0,4).text(),'是')
+        self.assertEqual(self.window.net_table.horizontalHeader().stretchLastSection(),False)
+        self.assertGreater(self.window.net_table.horizontalHeader().length(),0)
 
     def test_network_page_auto_refreshes_and_warns_without_network(self):
         self.connect_fake(); self.window.busy=False; self.window.go(5)

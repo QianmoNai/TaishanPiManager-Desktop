@@ -232,13 +232,17 @@ printf '@@status\n'; cli status
         else:
             credential = 'cli set_network "$new_id" key_mgmt NONE | grep -q "^OK$" || fail_setup\n'
         persistent_config, persistent_helper, persistent_init = persistent_wifi_files(self.interface, ssid_hex, mode, psk if mode == 'psk' else '')
-        persist = f'''umask 077
+        # wpa_cli save_config writes the complete profile set. Preserve every
+        # network block instead of replacing it with only the newly selected SSID.
+        persist = r'''
+umask 077
 mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
-printf %s {shlex.quote(persistent_config)} > /userdata/etc/.tspi-wifi.conf.tmp || fail_save
+[ -s /etc/wpa_supplicant.conf ] || fail_save
+cp -p /etc/wpa_supplicant.conf /userdata/etc/.tspi-wifi.conf.tmp || fail_save
 chmod 600 /userdata/etc/.tspi-wifi.conf.tmp || fail_save
 mv /userdata/etc/.tspi-wifi.conf.tmp /userdata/etc/tspi-wifi.conf || fail_save
-printf '%s\\n' "$iface" > /userdata/etc/tspi-wifi.interface || fail_save
-printf %s {shlex.quote(persistent_config)} > /etc/.tspi-wifi.conf.tmp || fail_save
+printf '%s\n' "$iface" > /userdata/etc/tspi-wifi.interface || fail_save
+cp -p /etc/wpa_supplicant.conf /etc/.tspi-wifi.conf.tmp || fail_save
 chmod 600 /etc/.tspi-wifi.conf.tmp || fail_save
 mv /etc/.tspi-wifi.conf.tmp /etc/wpa_supplicant.conf || fail_save
 printf %s {shlex.quote(persistent_helper)} > /userdata/bin/tspi-wifi-autostart || fail_save
@@ -248,19 +252,22 @@ chmod 755 /etc/init.d/S40tspi-wifi || fail_save
 sync || fail_save
 '''
         script = self.prepare(True) + r'''
+fail_setup() { echo ERR:SETUP_FAILED; exit 1; }
+fail_save() { echo ERR:SAVE_FAILED; exit 1; }
 old_id=$(cli status | sed -n 's/^id=//p')
-enabled=$(cli list_networks | awk -F '\t' 'NR>1 && $1 ~ /^[0-9]+$/ && $4 !~ /\[DISABLED\]/ {print $1}')
+all_ids=$(cli list_networks | awk -F '\t' 'NR>1 && $1 ~ /^[0-9]+$/ {print $1}')
+# A previous version could leave older profiles disabled after select_network.
+# Enable every saved profile so wpa_supplicant may fall back automatically.
+for id in $all_ids; do cli enable_network "$id" >/dev/null || fail_setup; done
 new_id=''; committed=0
 rollback() {
   [ "$committed" = 0 ] || return
   [ -z "$new_id" ] || cli remove_network "$new_id" >/dev/null
   case "$old_id" in ''|*[!0-9]*) ;; *) cli select_network "$old_id" >/dev/null;; esac
-  for id in $enabled; do cli enable_network "$id" >/dev/null; done
+  for id in $all_ids; do cli enable_network "$id" >/dev/null; done
 }
 trap rollback EXIT
 trap 'exit 1' INT TERM HUP
-fail_setup() { echo ERR:SETUP_FAILED; exit 1; }
-fail_save() { echo ERR:SAVE_FAILED; exit 1; }
 new_id=$(cli add_network)
 case "$new_id" in ''|*[!0-9]*) new_id=''; fail_setup;; esac
 ''' + f'cli set_network "$new_id" ssid {ssid_hex.lower()} | grep -q "^OK$" || fail_setup\n' + credential + r'''
@@ -274,7 +281,10 @@ while [ "$count" -lt 30 ]; do
   count=$((count+1)); sleep 1
 done
 [ "$authenticated" = 1 ] || { echo ERR:AUTH_TIMEOUT; exit 1; }
-# Persist the selected network so wpa_supplicant can reconnect after reboot.
+# Re-enable every saved profile after select_network temporarily disables the others.
+# Save only after this restoration so reboot and link loss can fall back.
+for id in $all_ids; do cli enable_network "$id" >/dev/null || { echo ERR:SAVE_FAILED; exit 1; }; done
+cli enable_network "$new_id" >/dev/null || { echo ERR:SAVE_FAILED; exit 1; }
 cli set update_config 1 | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
 cli save_config | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
 ''' + persist + r'''

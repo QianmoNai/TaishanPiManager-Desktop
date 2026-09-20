@@ -59,6 +59,11 @@ class WifiBackendTests(unittest.TestCase):
         self.assertIn(hashlib.pbkdf2_hmac('sha1',password.encode(),ssid,4096,32).hex(),script)
         self.assertIn('set update_config 1',script)
         self.assertIn('save_config',script)
+        self.assertIn('enable_network \"$new_id\"',script)
+        self.assertIn('all_ids=',script)
+        self.assertIn('for id in $all_ids',script)
+        self.assertIn('select_network \"$new_id\"',script)
+        self.assertIn('Save only after',script)
         self.assertIn('priority 100',script)
         self.assertIn('/userdata/etc/tspi-wifi.conf',script)
         self.assertIn('/etc/.tspi-wifi.conf.tmp',script)
@@ -80,6 +85,19 @@ class WifiBackendTests(unittest.TestCase):
     def test_completed_without_connection_marker_is_not_success(self):
         adb=FakeAdb(b'@@status\nwpa_state=COMPLETED\n')
         with self.assertRaisesRegex(UserError,'尚未确认'): Wifi(adb,'usb').connect({'ssid_hex':'61','security':'open'})
+
+    def test_persistence_copies_complete_wpa_profile(self):
+        adb=FakeAdb(b'@@interface\nwlan0\n@@interfaces\nwlan0\n@@status\nwpa_state=COMPLETED\nssid=Second\nid=2\n@@connected\nyes\n')
+        Wifi(adb,'usb','wlan0').connect({'ssid_hex':'5365636f6e64','security':'open'})
+        script=adb.scripts[0]
+        self.assertIn('cp -p /etc/wpa_supplicant.conf /userdata/etc/.tspi-wifi.conf.tmp',script)
+        self.assertIn('save_config',script)
+        self.assertIn('enable_network \"$new_id\"',script)
+        self.assertIn('all_ids=',script)
+        self.assertIn('for id in $all_ids',script)
+        self.assertIn('select_network \"$new_id\"',script)
+        self.assertIn('Save only after',script)
+
 
 
 class WifiUiTests(unittest.TestCase):

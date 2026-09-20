@@ -2,8 +2,9 @@ from collections import deque
 import time
 from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool, QTimer, QRectF
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from selection_widgets import QComboBox
 from PySide6.QtWidgets import (QWidget,QFrame,QLabel,QVBoxLayout,QHBoxLayout,QGridLayout,
-    QComboBox,QPushButton,QLineEdit,QSpinBox,QMessageBox,QApplication,
+    QPushButton,QLineEdit,QSpinBox,QMessageBox,QApplication,
     QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView)
 from traffic import speed_test
 from public_speed import public_speed_test,connectivity_test,NODES

@@ -1,6 +1,7 @@
 """Native network proxy panel; no browser dashboard or credentials in settings."""
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QCheckBox, QFileDialog, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
+from selection_widgets import QComboBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QFileDialog, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 
 
 class ProxyPanel(QWidget):

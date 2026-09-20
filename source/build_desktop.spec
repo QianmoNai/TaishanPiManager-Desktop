@@ -6,7 +6,7 @@ a = Analysis(
     [str(Path(SPECPATH) / 'desktop.py')],
     pathex=[],
     binaries=[],
-    datas=[(str(Path(SPECPATH).parent / 'plugins' / 'network-monitor'), 'plugins/network-monitor')],
+    datas=[(str(Path(SPECPATH).parent / 'plugins' / name), 'plugins/'+name) for name in ('network-monitor','network-proxy')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

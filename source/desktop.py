@@ -22,6 +22,7 @@ from adb_core import Adb, App, UserError, MAX_TRANSFER, remote_path
 from terminal_widget import Terminal
 from traffic_widget import TrafficPanel
 from plugin_center import PluginCenter
+from proxy_widget import ProxyPanel
 from network_status import NETWORK_STATUS_COMMAND, parse_network_status
 
 ICONS = {
@@ -202,7 +203,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.21','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.22','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -210,7 +211,7 @@ class Window(QMainWindow):
         line=QHBoxLayout(); line.setSpacing(10); usb=label(); usb.setPixmap(icon('usb',size=22).pixmap(22,22)); line.addWidget(usb)
         self.device_select=QComboBox(); self.device_select.setMinimumHeight(38); self.device_select.addItem('连接 USB 后，刷新设备',''); self.device_select.currentIndexChanged.connect(self.select_device); line.addWidget(self.device_select,1)
         self.refresh_btn=button('刷新设备',self.refresh,symbol='refresh'); line.addWidget(self.refresh_btn)
-        self.net_btn=button('网络连接',self.toggle_network); line.addWidget(self.net_btn); connection_layout.addLayout(line)
+        self.net_btn=button('无线连接',self.toggle_network); line.addWidget(self.net_btn); connection_layout.addLayout(line)
         self.connection_hint=label('用 USB 数据线连接开发板的 OTG 接口；选择 USB 设备后会自动读取局域网 IP。','caption',True); connection_layout.addWidget(self.connection_hint)
         self.net_panel=QWidget(); net=QHBoxLayout(self.net_panel); net.setContentsMargins(0,5,0,0); self.address=QLineEdit(''); self.address.setPlaceholderText('自动读取设备 IP:5555，也可手动填写'); self.connect_btn=button('连接',self.connect_network,'primary'); net.addWidget(self.address,1); net.addWidget(self.connect_btn); self.net_panel.hide(); connection_layout.addWidget(self.net_panel); outer.addWidget(connection)
         self.banner=label('','notice',True); self.banner.hide(); outer.addWidget(self.banner)
@@ -219,6 +220,7 @@ class Window(QMainWindow):
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
         self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn])
+        self.guarded.extend(self.proxy.controls)
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
@@ -354,9 +356,17 @@ class Window(QMainWindow):
             btn=button(title,lambda checked=False,a=action:self.service(a),'primary' if action=='start' else 'secondary'); self.service_buttons.append(btn); row.addWidget(btn)
         row.addStretch(); box.addLayout(row); self.service_output=self.console('连接设备后查看服务状态。'); self.service_output.setMinimumHeight(100); box.addWidget(self.service_output); detail.addWidget(frame)
         layout.addWidget(self.plugin_detail); self.plugin_detail.hide(); self.plugin_center.detail_callback=self.open_plugin
+        self.proxy=ProxyPanel(self,label,button,card); layout.addWidget(self.proxy); self.proxy.hide()
         layout.addStretch()
 
+    def open_proxy(self):
+        self.plugin_detail.hide(); self.plugin_center.hide(); self.proxy.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('网络代理'); self.subtitle.setText('Mihomo · 配置、模式与节点管理。')
+        self.proxy.action('status')
+
     def open_plugin(self):
+        self.proxy.hide()
         self.plugin_center.hide(); self.plugin_detail.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('网络流量'); self.subtitle.setText('插件详情 · 速度、测速与累计流量。')
@@ -373,6 +383,7 @@ class Window(QMainWindow):
         else: self.refresh_plugins()
 
     def close_plugin(self):
+        self.proxy.hide()
         self.plugin_detail.hide(); self.plugin_center.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('插件中心'); self.subtitle.setText('发现、安装与管理你的设备工具。')
@@ -384,7 +395,7 @@ class Window(QMainWindow):
         if self.busy: return
         self.plugin_center.render({'state':'unknown'})
         self.plugin_center.hint.setText('正在读取当前设备的插件状态…')
-        self.work(lambda:self.call('plugin-status'),self.plugin_center.render,'正在刷新插件状态…')
+        self.work(lambda:{**self.call('plugin-status'),'proxy':self.call('proxy-status')},self.plugin_center.render,'正在刷新插件状态…')
 
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
@@ -517,6 +528,7 @@ class Window(QMainWindow):
         if refresh and index==0: self.poll()
         if refresh and index==5: self.refresh_network_status()
         if index==4:
+            self.proxy.hide()
             self.plugin_detail.hide(); self.plugin_center.show()
             if refresh: self.refresh_plugins()
 
@@ -587,6 +599,7 @@ class Window(QMainWindow):
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)
 
     def reset_data(self):
+        self.proxy.reset(); self.proxy.hide()
         self.traffic.reset()
         self.plugin_center.render({'state':'unknown' if self.serial else 'offline'})
         self.plugin_detail.hide(); self.plugin_center.show()
@@ -611,7 +624,7 @@ class Window(QMainWindow):
             if interface == 'lo' or ip.startswith(('127.','169.254.')): return
             self.address.setText(ip+':5555')
             self.address.setToolTip(f'从 USB ADB 自动读取：{interface} · {ip}')
-            self.connection_hint.setText(f'已读取局域网地址 {ip}:5555；点击“网络连接”即可切换到网络 ADB。')
+            self.connection_hint.setText(f'已读取局域网地址 {ip}:5555；点击“无线连接”即可切换到网络 ADB。')
         self.work(lambda:self.api.adb.shell(serial,"ip -o -4 addr show scope global 2>/dev/null",timeout=5)[0],update,'正在读取泰山派局域网 IP…',True)
 
     def connect_network(self):
@@ -879,7 +892,9 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==5
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==6
+            from proxy_plugin import ASSETS as PROXY_ASSETS
+            ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file()
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

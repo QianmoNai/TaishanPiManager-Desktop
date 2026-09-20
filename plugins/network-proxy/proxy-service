@@ -1,0 +1,58 @@
+#!/bin/sh
+# TSPI_MANAGER_PROXY_V1
+set -eu
+umask 077
+BASE=/userdata/network-proxy
+PID=/run/tspi-proxy.pid
+LOCK=/run/tspi-proxy.lock
+running() {
+    [ -f "$PID" ] || return 1
+    pid=$(cat "$PID")
+    case "$pid" in ''|*[!0-9]*) return 1;; esac
+    [ "$(readlink /proc/$pid/exe 2>/dev/null)" = "$BASE/mihomo" ] && kill -0 "$pid" 2>/dev/null
+}
+status() {
+    if running; then echo running; else echo stopped; fi
+    if [ -s "$BASE/config.yaml" ]; then echo configured; else echo unconfigured; fi
+    if [ -f "$BASE/autostart" ]; then echo autostart; fi
+}
+start() {
+    running && return 0
+    [ -s "$BASE/config.yaml" ] || { echo '请先导入 Clash/Mihomo 配置。'; exit 1; }
+    if ! "$BASE/mihomo" -t -d "$BASE" -f "$BASE/config.yaml" > "$BASE/validation.log" 2>&1; then
+        echo '配置校验失败，请检查配置和 provider/规则资源。'; exit 1
+    fi
+    [ ! -f "$BASE/service.log" ] || mv -f "$BASE/service.log" "$BASE/service.log.previous"
+    nohup "$BASE/mihomo" -d "$BASE" -f "$BASE/config.yaml" > "$BASE/service.log" 2>&1 < /dev/null &
+    echo $! > "$PID"
+    sleep 2
+    running || { echo '启动失败，请检查端口是否占用及配置资源是否可用。'; exit 1; }
+}
+stop() {
+    if running; then
+        kill "$pid"
+        count=0
+        while running; do
+            count=$((count+1))
+            [ "$count" -lt 10 ] || { echo '核心尚未退出，请稍后重试。'; exit 1; }
+            sleep 1
+        done
+    fi
+    rm -f "$PID"
+}
+case "${1:-status}" in
+    status) status; exit 0;;
+    start|stop|restart|enable|disable) ;;
+    *) echo '无效操作'; exit 1;;
+esac
+mkdir "$LOCK" 2>/dev/null || { echo '代理服务正在操作中。'; exit 1; }
+trap 'rmdir "$LOCK"' EXIT
+trap 'exit 1' INT TERM HUP
+case "$1" in
+    start) start;;
+    stop) stop;;
+    restart) stop; start;;
+    enable) touch "$BASE/autostart"; sync;;
+    disable) rm -f "$BASE/autostart"; sync;;
+esac
+status

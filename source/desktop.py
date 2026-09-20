@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QProgressBar, QScrollArea, QAbstractItemView, QSizePolicy,
 )
 from adb_core import Adb, App, UserError, MAX_TRANSFER, remote_path
+from terminal_widget import Terminal
 
 ICONS = {
     'wifi': '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
@@ -68,7 +69,7 @@ def label(text='', kind=None, wrap=False):
 def configure_app(app, settings=None):
     # Explicit registration also makes offscreen QA use the same Windows fonts.
     fonts=Path(os.environ.get('WINDIR','C:/Windows'))/'Fonts'
-    for name in ('segoeui.ttf','segoeuib.ttf','msyh.ttc','msyhbd.ttc'):
+    for name in ('segoeui.ttf','segoeuib.ttf','msyh.ttc','msyhbd.ttc','consola.ttf','consolab.ttf','consolai.ttf'):
         path=fonts/name
         if path.exists(): QFontDatabase.addApplicationFont(str(path))
     app.setStyle('Fusion'); app.setFont(QFont('Microsoft YaHei UI',10))
@@ -193,11 +194,11 @@ class Window(QMainWindow):
         names=QVBoxLayout(); names.setSpacing(2); names.addWidget(label('泰山派','brand')); names.addWidget(label('Device Manager','caption')); brand.addLayout(names); brand.addStretch(); side.addLayout(brand)
         side.addSpacing(30); side.addWidget(label('  设备管理','sideHeading')); side.addSpacing(5)
         self.nav=[]
-        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('命令控制台','terminal'),('服务与维护','settings'),('Wi-Fi 网络','wifi')]):
+        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('服务与维护','settings'),('Wi-Fi 网络','wifi')]):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.3','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.4','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -212,7 +213,7 @@ class Window(QMainWindow):
         self.stack=QStackedWidget(); outer.addWidget(self.stack,1)
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
-        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.run_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
+        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
         self.guarded.extend([self.install_monitor_btn,self.monitor_autostart])
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
@@ -274,11 +275,30 @@ class Window(QMainWindow):
         self.log_output=self.console('最近 250 行日志会显示在这里。'); box.addWidget(self.log_output); box.addWidget(label('新固件可能尚未安装网络监控脚本，对应日志会提示不存在。','caption',True)); layout.addWidget(frame); layout.addStretch()
 
     def build_terminal(self):
-        layout=self.scroll_page(); frame,box=card(); box.addWidget(label('命令控制台','section')); box.addWidget(label('每次独立 Shell 会话，最长等待 30 秒。命令以设备 ADB 用户权限运行。','subtle',True))
-        row=QHBoxLayout()
-        for title,command in [('系统版本','uname -a'),('磁盘空间','df -h'),('进程列表','ps'),('网络状态','ip addr')]: row.addWidget(button(title,lambda checked=False,c=command:self.command_edit.setPlainText(c)))
-        row.addStretch(); box.addLayout(row); self.command_edit=QPlainTextEdit(); self.command_edit.setPlaceholderText('例如：ls -lah /userdata'); self.command_edit.setFixedHeight(88); box.addWidget(self.command_edit)
-        row=QHBoxLayout(); self.command_confirm=QCheckBox('允许执行输入的命令（可能修改设备）'); row.addWidget(self.command_confirm); row.addStretch(); self.run_btn=button('执行',self.run_command,'primary'); row.addWidget(self.run_btn); box.addLayout(row); self.command_output=self.console('执行结果'); box.addWidget(self.command_output); layout.addWidget(frame); layout.addStretch()
+        page=QWidget(); page.setObjectName('page'); box=QVBoxLayout(page); box.setContentsMargins(0,0,0,0); box.setSpacing(12); self.stack.addWidget(page)
+        row=QHBoxLayout(); self.terminal_status=label('未连接终端','subtle'); row.addWidget(self.terminal_status,1)
+        self.terminal_size=label('','caption'); row.addWidget(self.terminal_size)
+        self.terminal_start=button('连接终端',self.start_terminal,'primary'); row.addWidget(self.terminal_start)
+        self.terminal_stop=button('断开',self.stop_terminal); self.terminal_stop.setEnabled(False); row.addWidget(self.terminal_stop); box.addLayout(row)
+        self.terminal=Terminal(); self.terminal.setMinimumHeight(200)
+        self.terminal.connectionChanged.connect(self.terminal_state); self.terminal.sizeChanged.connect(lambda cols,rows:self.terminal_size.setText(f'{cols} × {rows}'))
+        box.addWidget(self.terminal,1)
+        row=QHBoxLayout(); row.addWidget(button('中断 Ctrl+C',lambda:self.terminal.send(b'\x03')))
+        row.addWidget(button('复制选中',self.terminal.copy_selection)); row.addWidget(button('粘贴',self.terminal.paste)); row.addWidget(button('清空显示',self.terminal.clear_screen)); row.addStretch(); box.addLayout(row)
+        box.addWidget(label('Enter 执行 · ↑↓ 历史 · Tab 补全 · Ctrl+Shift+C / V 复制粘贴 · 滚轮查看历史','caption',True))
+        box.addWidget(label('持续 ADB Shell 会话，以设备权限执行。切换设备或断开会结束会话；后台程序可能继续运行。','caption',True))
+
+    def start_terminal(self):
+        if not self.require_device(): return
+        self.terminal.connect_device(self.api.adb.path,self.serial)
+
+    def terminal_state(self,connected,message):
+        self.terminal_status.setText(message); self.terminal_start.setEnabled(not connected)
+        self.terminal_stop.setEnabled(connected)
+
+    def stop_terminal(self):
+        if self.terminal.connected and not self.ask('断开终端','当前终端会话将结束，前台任务可能被中断。后台任务不保证停止。'): return
+        self.terminal.disconnect_device()
 
     def build_services(self):
         layout=self.scroll_page(); frame,box=card(); box.addWidget(label('网络健康监控','section')); self.monitor_label=label('调用设备上已安装的 check_orangepi 监控脚本。','subtle',True); box.addWidget(self.monitor_label)
@@ -396,7 +416,7 @@ class Window(QMainWindow):
 
     def go(self,index,refresh=True):
         self.stack.setCurrentIndex(index)
-        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('命令控制台','熟悉的命令，更直观的工作空间。'),('服务与维护','常用操作，触手可及。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
+        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('终端','持续会话，实时交互。'),('服务与维护','常用操作，触手可及。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
         self.title.setText(names[index][0]); self.subtitle.setText(names[index][1])
         for i,btn in enumerate(self.nav): btn.setChecked(i==index)
         if refresh and index==0: self.poll()
@@ -453,18 +473,22 @@ class Window(QMainWindow):
 
     def select_device(self):
         selected=self.device_select.currentData() or ''
+        if selected!=self.serial and self.terminal.connected:
+            if not self.ask('切换设备','切换设备会关闭当前终端会话，是否继续？'):
+                self.device_select.blockSignals(True); self.device_select.setCurrentIndex(max(0,self.device_select.findData(self.serial))); self.device_select.blockSignals(False); return
         if selected!=self.serial: self.serial=selected; self.reset_data()
         self.set_badge(bool(self.serial),'已连接' if self.serial else '未连接')
         if self.serial:
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)
 
     def reset_data(self):
+        self.terminal.disconnect_device(); self.terminal.clear_screen(); self.terminal_status.setText('未连接终端')
         self.clear_wifi_selection(); self.wifi_iface.blockSignals(True); self.wifi_iface.clear(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.blockSignals(False)
         self.previous_cpu=None; self.file_serial=''; self.rows=[]; self.table.setRowCount(0); self.file_hint.setText('打开目录后查看文件。')
         for metric in self.metrics: metric.value.setText('—'); metric.detail.setText('等待设备数据'); metric.bar.setValue(0)
         for value in self.info_labels.values(): value.setText('—')
         self.hostname.setText('正在连接…' if self.serial else '你好，泰山派。'); self.os_label.setText('连接设备，开始你的工作。'); self.hero_tag.setText('USB 即连即用   ·   Linux / Buildroot')
-        self.log_output.clear(); self.command_output.clear(); self.service_output.clear(); self.monitor_label.setText('调用设备上已安装的 check_orangepi 监控脚本。'); self.clear_storage(); self.storage_box.addWidget(label('等待设备数据','subtle'))
+        self.log_output.clear(); self.service_output.clear(); self.monitor_label.setText('调用设备上已安装的 check_orangepi 监控脚本。'); self.clear_storage(); self.storage_box.addWidget(label('等待设备数据','subtle'))
 
     def toggle_network(self): self.net_panel.setVisible(not self.net_panel.isVisible())
 
@@ -572,12 +596,6 @@ class Window(QMainWindow):
             try: Path(filename).write_text(self.log_output.toPlainText(),encoding='utf-8'); self.notify('已保存：'+filename)
             except OSError as exc: self.notify(str(exc),True)
 
-    def run_command(self):
-        if not self.require_device(): return
-        if not self.command_confirm.isChecked(): self.notify('请先勾选命令执行确认。',True); return
-        command=self.command_edit.toPlainText()
-        self.work(lambda:self.call('command',{'command':command,'confirm':True}),lambda data:self.command_output.setPlainText(f'$ {command}\n\n{data["output"]}\n[退出码 {data["code"]}]'),'正在执行命令…')
-
     def service(self,action):
         if not self.require_device(): return
         if action!='status' and not self.ask('确认服务操作',f'将在 {self.serial} 上'+('启动' if action=='start' else '停止')+'监控服务。'): return
@@ -602,6 +620,9 @@ class Window(QMainWindow):
     def closeEvent(self,event):
         if self.busy or self.pool.activeThreadCount():
             self.notify('操作仍在进行，请等待结束后关闭窗口。',True); event.ignore(); return
+        if self.terminal.connected and not self.ask('退出软件','当前终端会话将关闭，是否退出？'):
+            event.ignore(); return
+        self.terminal.disconnect_device()
         self.timer.stop(); event.accept()
 
 

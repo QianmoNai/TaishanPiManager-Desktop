@@ -57,7 +57,7 @@ class DesktopTests(unittest.TestCase):
     def test_empty_device_and_all_pages(self):
         self.window.render_devices([])
         self.assertEqual(self.window.serial,'')
-        for index in range(5):
+        for index in range(6):
             self.window.go(index); self.assertEqual(self.window.stack.currentIndex(),index)
         self.window.load_files(); self.assertIn('请先',self.window.banner.text())
 
@@ -71,15 +71,14 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.window.metrics[0].value.text(),'—')
         self.assertEqual(self.window.info_labels['kernel'].text(),'—')
 
-    def test_files_logs_and_command_confirmation(self):
+    def test_files_logs_and_terminal_page(self):
         self.connect_fake(); self.window.go(1); self.window.load_files(); self.wait_idle()
         self.assertEqual(self.window.table.rowCount(),2)
         self.assertEqual(self.window.table.item(1,0).text(),"a'; test.txt")
         self.window.go(2); self.window.logs(); self.wait_idle(); self.assertIn('测试日志',self.window.log_output.toPlainText())
-        self.window.go(3); self.window.command_edit.setPlainText('uname -a'); self.window.run_command()
-        self.assertIn('勾选',self.window.banner.text())
-        self.window.command_confirm.setChecked(True); self.window.run_command(); self.wait_idle()
-        self.assertIn('退出码 0',self.window.command_output.toPlainText())
+        self.window.go(3); self.assertFalse(self.window.terminal.connected)
+        with patch.object(self.window.terminal,'connect_device') as connect:
+            self.window.start_terminal(); connect.assert_called_once_with(self.api.adb.path,'usb-test')
 
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))

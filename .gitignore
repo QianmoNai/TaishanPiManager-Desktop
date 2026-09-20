@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+.venv/
+.env
+*.log
+/TaishanPiManager.exe
+/adb/*.exe
+/adb/*.dll
+/iperf3/*.exe
+/iperf3/*.dll

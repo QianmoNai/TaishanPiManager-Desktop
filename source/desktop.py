@@ -1,5 +1,6 @@
 """Native Qt Widgets desktop application. No browser, webview or HTTP listener."""
 from __future__ import annotations
+from serial_widget import SerialPanel
 
 import os
 from pathlib import Path
@@ -204,7 +205,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.28','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.29','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -359,15 +360,23 @@ class Window(QMainWindow):
         row.addStretch(); box.addLayout(row); self.service_output=self.console('连接设备后查看服务状态。'); self.service_output.setMinimumHeight(100); box.addWidget(self.service_output); detail.addWidget(frame)
         layout.addWidget(self.plugin_detail); self.plugin_detail.hide(); self.plugin_center.detail_callback=self.open_plugin
         self.proxy=ProxyPanel(self,label,button,card); layout.addWidget(self.proxy); self.proxy.hide()
+        self.serial_tool=SerialPanel(self,label,button,card); layout.addWidget(self.serial_tool); self.serial_tool.hide()
         layout.addStretch()
 
+    def open_serial(self):
+        self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('串口助手'); self.subtitle.setText('UART3 · 串口收发、波形与引脚配置。'); self.serial_tool.refresh()
+
     def open_proxy(self):
+        self.serial_tool.hide()
         self.plugin_detail.hide(); self.plugin_center.hide(); self.proxy.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('网络代理'); self.subtitle.setText('Mihomo · 配置、模式与节点管理。')
         self.proxy.action('status')
 
     def open_plugin(self):
+        self.serial_tool.hide()
         self.proxy.hide()
         self.plugin_center.hide(); self.plugin_detail.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -385,6 +394,7 @@ class Window(QMainWindow):
         else: self.refresh_plugins()
 
     def close_plugin(self):
+        self.serial_tool.hide()
         self.proxy.hide()
         self.plugin_detail.hide(); self.plugin_center.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -530,6 +540,7 @@ class Window(QMainWindow):
         if refresh and index==0: self.poll()
         if refresh and index==5: self.refresh_network_status()
         if index==4:
+            self.serial_tool.hide()
             self.proxy.hide()
             self.plugin_detail.hide(); self.plugin_center.show()
             if refresh: self.refresh_plugins()
@@ -589,8 +600,8 @@ class Window(QMainWindow):
 
     def select_device(self):
         selected=self.device_select.currentData() or ''
-        if selected!=self.serial and any(term.is_active() for term in self.terminals):
-            if not self.ask('切换设备','切换设备会关闭全部终端会话，是否继续？'):
+        if selected!=self.serial and (any(term.is_active() for term in self.terminals) or self.serial_tool.active()):
+            if not self.ask('切换设备','切换设备会关闭全部终端和串口会话，是否继续？'):
                 self.device_select.blockSignals(True); self.device_select.setCurrentIndex(max(0,self.device_select.findData(self.serial))); self.device_select.blockSignals(False); return
         if selected!=self.serial: self.serial=selected; self.reset_data()
         if self.serial:
@@ -601,6 +612,7 @@ class Window(QMainWindow):
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)
 
     def reset_data(self):
+        self.serial_tool.reset(); self.serial_tool.hide()
         self.proxy.reset(); self.proxy.hide()
         self.traffic.reset()
         self.plugin_center.render({'state':'unknown' if self.serial else 'offline'})
@@ -775,10 +787,10 @@ class Window(QMainWindow):
     def closeEvent(self,event):
         if self.busy or self.pool.activeThreadCount() or self.traffic.pool.activeThreadCount():
             self.notify('操作仍在进行，请等待结束后关闭窗口。',True); event.ignore(); return
-        if any(term.is_active() for term in self.terminals) and not self.ask('退出软件','全部终端会话将关闭，是否退出？'):
+        if (any(term.is_active() for term in self.terminals) or self.serial_tool.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
             event.ignore(); return
         for term in self.terminals: term.disconnect_device()
-        self.timer.stop(); self.traffic.timer.stop(); event.accept()
+        self.serial_tool.shutdown(); self.timer.stop(); self.traffic.timer.stop(); event.accept()
 
 
 STYLE='''
@@ -933,9 +945,11 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==6
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==7
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
+            from serial_assistant import ASSETS as SERIAL_ASSETS
+            ok = ok and (SERIAL_ASSETS/'serial-helper.pl').is_file() and hasattr(window,'serial_tool')
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

@@ -93,9 +93,8 @@ class ProxyPanel(QWidget):
         row=QHBoxLayout(); row.addWidget(label('测速地址','caption')); self.test_url=QLineEdit('https://www.gstatic.com/generate_204'); row.addWidget(self.test_url,1); self.controls.append(self.test_url); box.addLayout(row)
         box.addWidget(label('延迟为泰山派经该节点访问测速地址的耗时，超时 5 秒。不可达仅表示本次测试失败；REJECT 是拦截策略。','caption',True)); layout.addWidget(frame)
         self.diagnostics=DiagnosticsPanel(self,label,button,card); layout.addWidget(self.diagnostics)
-        toggle=button('配置与服务管理 ▸',self.toggle_management); layout.addWidget(toggle); self.management_toggle=toggle
         self.management=QWidget(); management=QVBoxLayout(self.management); management.setContentsMargins(0,0,0,0); layout.addWidget(self.management)
-        frame,box=card(); box.addWidget(label('核心与配置','section')); box.addWidget(label('Mihomo 1.19.31 · ARM64 · HTTP/SOCKS 端口 7890','subtle'))
+        frame,box=card(); box.addWidget(label('配置与服务管理','section')); box.addWidget(label('Mihomo 1.19.31 · ARM64 · HTTP/SOCKS 端口 7890','subtle'))
         row=QHBoxLayout()
         for title,action in [('安装 / 升级核心','install'),('重启服务','restart'),('卸载插件','uninstall')]:
             btn=button(title,lambda checked=False,a=action:self.action(a),'danger' if action=='uninstall' else 'secondary'); row.addWidget(btn); self.controls.append(btn)
@@ -106,13 +105,10 @@ class ProxyPanel(QWidget):
         row=QHBoxLayout(); self.subscription_url=QLineEdit(); self.subscription_url.setPlaceholderText('粘贴 Clash / Mihomo 订阅配置链接（HTTP / HTTPS）'); self.subscription_url.setClearButtonEnabled(True); row.addWidget(self.subscription_url,1)
         btn=button('从链接导入',self.import_subscription,'primary'); row.addWidget(btn); self.controls.extend([self.subscription_url,btn]); box.addLayout(row)
         box.addWidget(label('由电脑下载订阅配置并交给核心校验；支持 YAML / JSON 配置链接，不支持仅返回 Base64 节点列表的订阅。链接不会保存，导入成功后清空。','caption',True))
-        box.addWidget(label('导入前请停止服务。支持 Clash/Mihomo YAML、JSON；默认只供泰山派本机使用，局域网访问需在客户端手动设置代理。此版本不接管 TUN 或 DNS。','caption',True)); management.addWidget(frame); self.management.hide()
+        box.addWidget(label('导入前请停止服务。支持 Clash/Mihomo YAML、JSON；默认只供泰山派本机使用，局域网访问需在客户端手动设置代理。此版本不接管 TUN 或 DNS。','caption',True)); management.addWidget(frame)
 
     def hideEvent(self,event):
         self.cancel_tests(); super().hideEvent(event)
-
-    def toggle_management(self):
-        self.management.setVisible(not self.management.isVisible()); self.management_toggle.setText('配置与服务管理 ▾' if self.management.isVisible() else '配置与服务管理 ▸')
 
     def reset(self):
         self.diagnostics.reset()
@@ -130,8 +126,6 @@ class ProxyPanel(QWidget):
             if state!='running':
                 self.diagnostics.invalidate()
                 self.cancel_tests(); self.groups=[]; self.group.clear(); self.metadata={}; self.delays={}; self.draw_nodes()
-            if state=='missing' or not data.get('configured'):
-                self.management.show(); self.management_toggle.setText('配置与服务管理 ▾')
         if 'output' in data: self.result.setText(data['output'])
         if 'groups' in data:
             old=self.group.currentData(); self.groups=data['groups']; self.metadata=data.get('nodes',{})

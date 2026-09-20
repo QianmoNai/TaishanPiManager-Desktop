@@ -98,7 +98,7 @@ class PublicUiTests(unittest.TestCase):
     def test_public_mode_hides_custom_address_and_can_run_without_monitor(self):
         from PySide6.QtTest import QTest
         self.connect_fake();panel=self.window.traffic;panel.timer.stop();panel.mode.setCurrentIndex(2)
-        self.assertTrue(panel.host.isHidden());self.assertEqual('一键公网测速',panel.mode.currentText())
+        self.assertTrue(panel.host.isHidden());self.assertEqual('公网测速',panel.mode.currentText())
         result={'node':'苏州 · JSQY','target':'speedtest.jsqiuying.com:8080','interface':'wlan0','latency_ms':20,'download':GOOD,'upload':GOOD}
         with patch.object(self.window,'ask',return_value=True),patch('traffic_widget.public_speed_test',return_value=result) as run:
             panel.test_speed()
@@ -107,3 +107,32 @@ class PublicUiTests(unittest.TestCase):
                 if not panel.speed_busy:break
             self.assertFalse(panel.speed_busy);self.assertEqual(run.call_args.args[2],'')
         self.assertIn('苏州',panel.result.text());self.assertIn('8.00 Mbps',panel.result.text())
+
+class SelectedNodeTests(unittest.TestCase):
+    def test_manual_selection_probes_and_transfers_only_selected_node(self):
+        adb=FakeAdb(); result=public_speed_test(adb,'usb','wlan0',node_index=1)
+        self.assertEqual(result['node'],NODES[1][0])
+        self.assertTrue(all(c.endswith(' 1') for c in adb.commands if ' probe ' in c or ' download ' in c or ' upload ' in c))
+
+    def test_manual_failure_does_not_fallback(self):
+        adb=FakeAdb(fail_first=True)
+        with self.assertRaises(UserError): public_speed_test(adb,'usb','wlan0',node_index=0)
+        self.assertFalse(any(c.endswith(' 1') for c in adb.commands if ' download ' in c or ' upload ' in c))
+        with self.assertRaisesRegex(UserError,'所选节点'): public_speed_test(FakeAdb(),'usb','wlan0',node_index=3)
+        adb=Mock()
+        with self.assertRaises(UserError): public_speed_test(adb,'usb','wlan0',node_index=-1)
+        adb.shell.assert_not_called()
+
+class SelectionUiTests(PublicUiTests):
+    def test_manual_node_is_sent_to_backend_and_management_is_permanent(self):
+        from PySide6.QtTest import QTest
+        self.connect_fake(); panel=self.window.traffic; panel.timer.stop(); panel.mode.setCurrentIndex(2); panel.public_node.setCurrentIndex(3)
+        result={'node':NODES[2][0],'target':'example:8080','interface':'wlan0','latency_ms':20,'download':GOOD,'upload':GOOD}
+        with patch.object(self.window,'ask',return_value=True),patch('traffic_widget.public_speed_test',return_value=result) as run:
+            panel.test_speed()
+            for _ in range(200):
+                QTest.qWait(10)
+                if not panel.speed_busy: break
+            self.assertEqual(run.call_args.kwargs['node_index'],2)
+        self.window.go(4,False); self.window.open_proxy(); self.wait_idle()
+        self.assertTrue(self.window.proxy.management.isVisible()); self.assertFalse(hasattr(self.window.proxy,'management_toggle'))

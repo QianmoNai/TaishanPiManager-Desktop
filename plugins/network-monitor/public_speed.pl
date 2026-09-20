@@ -56,7 +56,8 @@ sub read_body {
 }
 if ($mode eq 'probe') {
  my @found;
- for my $n (0..$#nodes) {
+ die "Invalid node\n" if defined($index) && ($index !~ /^\d$/ || $index>=@nodes);
+ for my $n (defined($index) ? ($index) : (0..$#nodes)) {
   my @times;
   for (1..2) {
    eval {

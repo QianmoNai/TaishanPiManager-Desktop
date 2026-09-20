@@ -31,7 +31,8 @@ def connectivity_test(adb,serial,interface='',progress=None):
     return public_speed_test(adb,serial,interface,progress,probe_only=True)
 
 
-def public_speed_test(adb,serial,interface,progress=None,probe_only=False):
+def public_speed_test(adb,serial,interface,progress=None,probe_only=False,node_index=None):
+    if node_index is not None and (type(node_index) is not int or not 0<=node_index<len(NODES)): raise UserError('请选择有效的公网测速节点。')
     progress=progress or (lambda message:None)
     if interface and not re.fullmatch(r'[A-Za-z0-9_.:-]{1,32}',interface): raise UserError('请选择有效网卡。')
     q=shlex.quote
@@ -60,7 +61,7 @@ ip -o -4 addr show dev "$dev"
         # the real board-side diagnostic if the command still fails.
         prefix='LC_ALL=C LANG=C timeout 90 perl '+q(path)+' '
         progress('正在检测国内及海外节点…')
-        raw,err,code=adb.shell(serial,prefix+'probe '+q(address),timeout=95,check=False)
+        raw,err,code=adb.shell(serial,prefix+'probe '+q(address)+(' '+str(node_index) if node_index is not None else ''),timeout=95,check=False)
         if code:
             detail=(raw+err.encode('utf-8','replace')).decode('utf-8','replace').strip()
             raise UserError('设备公网节点探测失败。'+(('\n'+detail[:500]) if detail else ' 请检查设备的 Perl、DNS 和外网连接。'))
@@ -77,6 +78,9 @@ ip -o -4 addr show dev "$dev"
                 {'name':name,'target':f'{host}:{port}','latency_ms':reachable.get(i),
                  'reachable':i in reachable}
                 for i,(name,host,port) in enumerate(NODES)]}
+        if node_index is not None:
+            nodes=[n for n in nodes if n['index']==node_index]
+            if not nodes: raise UserError('所选节点暂时不可达：'+NODES[node_index][0]+'。请手动选择其他节点或使用自动选择。')
         if not nodes: raise UserError('公网测速节点暂时均不可达。请检查泰山派外网连接，或稍后重试。')
         errors=[]
         for n in nodes:

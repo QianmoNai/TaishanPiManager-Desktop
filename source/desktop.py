@@ -204,7 +204,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.23','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.24','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -833,6 +833,18 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { color: #73737d; font-size: 12px; spacing: 7px; }
 QToolTip { background: #fff; border: 1px solid #dedee5; padding: 8px; color: #444; }
+QPushButton#proxyNode { background: #f8faff; border: 1px solid #dfe5ef; border-radius: 12px; padding: 0; }
+QPushButton#proxyNode:hover { background: #edf4ff; border-color: #80b8ff; }
+QPushButton#proxyNode[selected="true"] { background: #e5f0ff; border: 2px solid #007aff; }
+QPushButton#proxyNode:focus { border: 2px solid #007aff; }
+QLabel#nodeTitle { font-size: 13px; font-weight: 600; color: #263a53; }
+QLabel#nodeDelay { font-size: 11px; font-weight: 600; }
+QLabel#nodeDelay[tone="good"] { color: #18834b; }
+QLabel#nodeDelay[tone="slow"] { color: #ad7200; }
+QLabel#nodeDelay[tone="bad"] { color: #ce4b49; }
+QLabel#nodeDelay[tone="muted"] { color: #7a8495; }
+QPushButton#nodeTest { padding: 2px 4px; border-radius: 6px; font-size: 11px; }
+
 QMessageBox { background: #f5f5f7; }
 '''
 
@@ -876,6 +888,16 @@ QHeaderView::section { background: #2c2c32; color: #b1b1bb; }
 QTableWidget::item { border-bottom-color: #34343b; }
 QScrollBar::handle:vertical { background: #50505c; }
 QCheckBox { color: #b9b9c4; }
+QPushButton#proxyNode { background: #292e38; border-color: #414957; }
+QPushButton#proxyNode:hover { background: #303f54; border-color: #629fec; }
+QPushButton#proxyNode[selected="true"] { background: #233f63; border: 2px solid #62aaff; }
+QPushButton#proxyNode:focus { border: 2px solid #62aaff; }
+QLabel#nodeTitle { color: #e6efff; }
+QLabel#nodeDelay[tone="good"] { color: #75d6a2; }
+QLabel#nodeDelay[tone="slow"] { color: #efc371; }
+QLabel#nodeDelay[tone="bad"] { color: #ff9392; }
+QLabel#nodeDelay[tone="muted"] { color: #adb6c5; }
+
 QToolTip { background: #303038; border-color: #50505c; color: #f2f2f7; }
 '''
 

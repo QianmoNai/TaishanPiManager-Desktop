@@ -9,6 +9,10 @@ import sys
 import tempfile
 import urllib.request
 import urllib.parse
+import urllib.error
+from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
+import time
 import yaml
 from adb_core import UserError
 
@@ -144,25 +148,82 @@ sync
         adb.shell(serial, f'rm -f {stage}/config.yaml {stage}/validation.log; rmdir {stage}', check=False)
 
 
-def controller(adb, serial, method, path, payload=None):
+class DelayUnavailable(Exception):
+    pass
+
+
+@contextmanager
+def controller_session(adb, serial):
     owned(adb, serial)
     if status(adb, serial)['state'] != 'running': raise UserError('请先启动网络代理。')
-    # Credentials remain in memory only and never appear in errors or command args.
     raw, _, _ = adb.shell(serial, f'cat {BASE}/config.yaml')
     try: config = json.loads(raw)
     except Exception: raise UserError('控制配置无法读取，请重新导入。') from None
     raw, _, _ = adb.run(['-s', serial, 'forward', 'tcp:0', 'tcp:9090'])
     port = int(raw.strip())
+    def request(method, path, payload=None):
+        try:
+            req = urllib.request.Request(f'http://127.0.0.1:{port}{path}', data=None if payload is None else json.dumps(payload).encode(), method=method,
+                                         headers={'Authorization': 'Bearer '+config['secret'], 'Content-Type': 'application/json'})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=9) as response:
+                body = response.read(4*1024*1024)
+            return json.loads(body) if body else {}
+        except urllib.error.HTTPError as exc:
+            if '/delay?' in path and exc.code in (503,504): raise DelayUnavailable() from None
+            raise UserError('代理控制接口请求失败，请刷新状态或检查核心。') from None
+        except Exception: raise UserError('代理控制接口连接失败，请检查 ADB 和核心状态。') from None
     try:
-        req = urllib.request.Request(f'http://127.0.0.1:{port}{path}', data=None if payload is None else json.dumps(payload).encode(), method=method,
-                                     headers={'Authorization': 'Bearer '+config['secret'], 'Content-Type': 'application/json'})
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(req, timeout=10) as response:
-            body = response.read(4*1024*1024)
-        return json.loads(body) if body else {}
-    except Exception: raise UserError('代理控制接口请求失败，请刷新状态或检查核心是否启动。') from None
+        yield request
     finally:
         adb.run(['-s', serial, 'forward', '--remove', f'tcp:{port}'], check=False)
+
+
+def controller(adb, serial, method, path, payload=None):
+    with controller_session(adb,serial) as request:
+        return request(method,path,payload)
+
+
+def proxy_snapshot(proxies, mode):
+    groups = [{'name': n, 'type': p.get('type'), 'now': p.get('now', ''), 'all': p.get('all', [])} for n,p in proxies.items() if 'all' in p]
+    nodes = {}
+    for name,p in proxies.items():
+        history=p.get('history') or []
+        last=history[-1] if history else {}
+        delay=last.get('delay')
+        nodes[name]={'type':p.get('type','Unknown'), 'udp':bool(p.get('udp')), 'now':p.get('now',''),
+                     'delay':delay if isinstance(delay,(int,float)) and delay>0 else None,
+                     'tested':bool(history), 'alive':isinstance(delay,(int,float)) and delay>0, 'time':last.get('time','')}
+    return {'groups':groups,'nodes':nodes,'mode':mode}
+
+
+def test_delays(adb,serial,data):
+    names=data.get('names',[]); url=data.get('url','https://www.gstatic.com/generate_204')
+    if not isinstance(names,list) or not 1<=len(names)<=4 or any(not isinstance(n,str) or not n for n in names):
+        raise UserError('每批最多测试 4 个节点。')
+    if not isinstance(url,str) or len(url)>2048: raise UserError('测速地址无效。')
+    try: parts=urllib.parse.urlsplit(url)
+    except ValueError: raise UserError("测速地址无效。") from None
+    if parts.scheme not in ('http','https') or not parts.hostname or parts.username or parts.password:
+        raise UserError('请输入不含账号密码的 HTTP/HTTPS 测速地址。')
+    with controller_session(adb,serial) as request:
+        def probe(name):
+            # Reject is an intentional policy, not a broken proxy server.
+            if name in ('REJECT','REJECT-DROP'): return name,{'state':'policy','delay':None}
+            query=urllib.parse.urlencode({'url':url,'timeout':5000})
+            path='/proxies/'+urllib.parse.quote(name,safe='')+'/delay?'+query
+            try:
+                response=request('GET',path)
+                delay=response.get('delay')
+                if not isinstance(delay,(int,float)) or delay<=0: raise DelayUnavailable()
+                result={'state':'ok','delay':delay}
+            except DelayUnavailable:
+                result={'state':'failed','delay':None}
+            # Transport/authentication errors abort the batch; do not label nodes dead.
+            return name,{**result,'time':time.strftime('%H:%M:%S')}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results=dict(pool.map(probe,names))
+    return {'delays':results,'url':url}
 
 
 def dispatch(adb, serial, action, data):
@@ -175,11 +236,12 @@ def dispatch(adb, serial, action, data):
         backup='/userdata/proxy-backups/removed-'+secrets.token_hex(8)
         adb.shell(serial, f'set -e\numask 077\nmkdir -p /userdata/proxy-backups\n[ ! -L {INIT} ]\nif [ -f {INIT} ]; then grep -qx "# TSPI_MANAGER_PROXY_V1" {INIT}; rm -f {INIT}; fi\nmv {BASE} {backup}\nsync')
         return {'state':'missing','output':'已卸载。核心与配置备份在：'+backup}
+    if action == 'delay': return test_delays(adb,serial,data)
     if action == 'groups':
-        proxies = controller(adb, serial, 'GET', '/proxies').get('proxies', {})
-        groups = [{'name': n, 'type': p.get('type'), 'now': p.get('now', ''), 'all': p.get('all', [])} for n,p in proxies.items() if 'all' in p]
-        config = controller(adb, serial, 'GET', '/configs')
-        return {'groups': groups, 'mode': config.get('mode', 'rule')}
+        with controller_session(adb,serial) as request:
+            proxies=request('GET','/proxies').get('proxies',{})
+            mode=request('GET','/configs').get('mode','rule')
+        return proxy_snapshot(proxies,mode)
     if action == 'select':
         group, node = data.get('group'), data.get('node')
         if not isinstance(group, str) or not isinstance(node, str): raise UserError('请选择策略组与节点。')

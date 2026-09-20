@@ -10,7 +10,7 @@ from serial_assistant import inventory,prepare,pin_config,encode_send,WaveDecode
 class WavePlot(QWidget):
     COLORS=['#4aa3ff','#42c890','#e8b54d','#ce85ff','#f07587','#54cddd','#c9cf72','#bc967a']
     def __init__(self):
-        super().__init__(); self.points=deque(maxlen=1000); self.setMinimumHeight(230)
+        super().__init__(); self.points=deque(maxlen=1000); self.visible_channels=list(range(8)); self.setMinimumHeight(230)
     def paintEvent(self,event):
         p=QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
         dark=QApplication.instance().property('theme')=='dark'; p.fillRect(self.rect(),QColor('#1c1c20' if dark else '#f7f9fc'))
@@ -22,6 +22,7 @@ class WavePlot(QWidget):
         for k in range(3):
             y=area.top()+area.height()*k/2; p.drawLine(int(area.left()),int(y),int(area.right()),int(y)); p.drawText(QRectF(0,y-8,60,20),Qt.AlignmentFlag.AlignRight,f'{hi-span*k/2:.3g}')
         for channel,color in enumerate(self.COLORS):
+            if channel not in self.visible_channels: continue
             path=QPainterPath(); started=False
             for i,row in enumerate(self.points):
                 if len(row)<=channel: started=False; continue
@@ -60,7 +61,10 @@ class SerialPanel(QWidget):
         row=QHBoxLayout(); self.hex=QCheckBox('HEX'); row.addWidget(self.hex); self.newline=QComboBox()
         for title,value in [('不追加换行','none'),('LF','lf'),('CRLF','crlf'),('CR','cr')]: self.newline.addItem(title,value)
         row.addWidget(self.newline); self.periodic=QCheckBox('定时发送'); self.periodic.toggled.connect(self.toggle_repeat); row.addWidget(self.periodic); self.interval=QSpinBox(); self.interval.setRange(100,60000); self.interval.setValue(1000); self.interval.setSuffix(' ms'); self.interval.valueChanged.connect(lambda v:self.repeat.setInterval(v)); row.addWidget(self.interval); row.addStretch(); row.addWidget(button('发送',self.send,'primary')); inner.addLayout(row); box.addWidget(frame)
-        frame,inner=card(); row=QHBoxLayout(); row.addWidget(label('实时波形','section')); self.protocol=QComboBox(); self.protocol.addItems(['不解析波形','FireWater（CSV 文本）','JustFloat（浮点帧）']); self.protocol.currentIndexChanged.connect(self.change_protocol); row.addWidget(self.protocol); row.addWidget(button('导出 CSV',self.save_csv)); inner.addLayout(row); self.plot=WavePlot(); inner.addWidget(self.plot); inner.addWidget(label('FireWater：1.0,2.0\\n；JustFloat：小端 float32 + 00 00 80 7F 帧尾。最多 8 通道，保留最近 1000 帧。','caption',True)); box.addWidget(frame)
+        frame,inner=card(); row=QHBoxLayout(); row.addWidget(label('实时波形','section')); row.addWidget(label('显示变量','caption')); self.channel_checks=[]
+        for i in range(8):
+            check=QCheckBox(f'CH{i+1}'); check.setChecked(True); check.toggled.connect(lambda checked,ch=i:self.set_channel_visible(ch,checked)); self.channel_checks.append(check); row.addWidget(check)
+        row.addStretch(); self.protocol=QComboBox(); self.protocol.addItems(['不解析波形','FireWater（CSV 文本）','JustFloat（浮点帧）']); self.protocol.currentIndexChanged.connect(self.change_protocol); row.addWidget(self.protocol); row.addWidget(button('导出 CSV',self.save_csv)); inner.addLayout(row); self.plot=WavePlot(); inner.addWidget(self.plot); inner.addWidget(label('FireWater：1.0,2.0\\n；JustFloat：小端 float32 + 00 00 80 7F 帧尾。最多 8 通道，保留最近 1000 帧。','caption',True)); box.addWidget(frame)
         frame,inner=card(); inner.addWidget(label('串口引脚复用','section')); row=QHBoxLayout(); self.uart=QComboBox(); self.uart.currentIndexChanged.connect(self.select_uart); row.addWidget(self.uart); self.group=QComboBox(); self.group.currentIndexChanged.connect(self.pin_hint); row.addWidget(self.group,1); self.enabled=QCheckBox('启用'); self.enabled.setChecked(True); row.addWidget(self.enabled); row.addWidget(button('导出 SDK 配置',self.export_pins)); inner.addLayout(row); self.pin_text=label('刷新后读取当前固件的 UART 引脚组。','caption',True); inner.addWidget(self.pin_text); inner.addWidget(label('波特率等参数在打开串口时应用、关闭时恢复。引脚复用由设备树决定：此处生成 .dtsi 配置，由你合入 SDK 并手动编译；不会在线改写 GPIO 或固件。','caption',True)); box.addWidget(frame)
         self.settings=[self.port,self.refresh_btn,self.baud,self.bits,self.parity,self.stops,self.flow,self.open_btn]
 
@@ -174,7 +178,11 @@ class SerialPanel(QWidget):
             if self.follow.isChecked(): bar.setValue(bar.maximum())
             else: bar.setValue(previous)
         self.count.setText(f'RX {self.rx} B · TX {self.tx} B · 无效波形帧 {self.decoder.dropped}'); self.plot.update()
-    def clear(self): self.receive.clear(); self.log_pending.clear(); self.rx=0; self.tx=0; self.text_decoder.reset(); self.plot.points.clear(); self.change_protocol()
+    def clear(self): self.receive.clear(); self.log_pending.clear(); self.rx=0; self.tx=0; self.text_decoder.reset(); self.plot.points.clear(); self.plot.visible_channels=list(range(8)); [c.setChecked(True) for c in self.channel_checks]; self.change_protocol()
+    def set_channel_visible(self,channel,visible):
+        if visible and channel not in self.plot.visible_channels: self.plot.visible_channels.append(channel); self.plot.visible_channels.sort()
+        elif not visible and channel in self.plot.visible_channels: self.plot.visible_channels.remove(channel)
+        self.plot.update()
     def change_protocol(self,*args): self.decoder=WaveDecoder(['none','firewater','justfloat'][self.protocol.currentIndex()]); self.plot.points.clear()
     def save_log(self):
         path,_=QFileDialog.getSaveFileName(self,'保存当前接收日志','serial-log.txt','文本 (*.txt)')

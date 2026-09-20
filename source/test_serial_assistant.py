@@ -50,3 +50,22 @@ class SerialUiTests(unittest.TestCase):
         p.connected=True; p.periodic.setChecked(True); self.assertTrue(p.repeat.isActive()); p.stop(); self.assertFalse(p.repeat.isActive())
 
 if __name__=='__main__': unittest.main()
+import unittest
+from serial_widget import WavePlot
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
+import test_desktop
+class ChannelUiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls): cls.app=QApplication.instance() or QApplication([]); from desktop import configure_app; configure_app(cls.app)
+    def test_plot_visibility_does_not_drop_samples(self):
+        plot=WavePlot(); plot.points.extend([[1,2,3,4],[5,6,7,8]]); plot.visible_channels=[0,3]; plot.show(); QTest.qWait(10); self.assertEqual(len(plot.points),2); self.assertEqual(plot.visible_channels,[0,3]); plot.close()
+    def test_serial_panel_has_eight_independent_channel_checks(self):
+        from serial_widget import SerialPanel
+        class Owner:
+            busy=False
+            close_plugin=lambda self: None
+            require_device=lambda self: False
+        from desktop import label,button,card
+        p=SerialPanel(Owner(),label,button,card); self.assertEqual(len(p.channel_checks),8); p.channel_checks[2].setChecked(False); self.assertNotIn(2,p.plot.visible_channels); p.channel_checks[2].setChecked(True); self.assertIn(2,p.plot.visible_channels); p.clear(); self.assertEqual(p.plot.visible_channels,list(range(8))); p.shutdown(); p.deleteLater()
+if __name__=='__main__': unittest.main()

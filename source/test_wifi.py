@@ -85,7 +85,7 @@ class WifiUiTests(unittest.TestCase):
     wait_idle = test_desktop.DesktopTests.wait_idle
     connect_fake = test_desktop.DesktopTests.connect_fake
     def wifi_ready(self):
-        self.connect_fake(); self.window.go(5)
+        self.connect_fake(); self.window.go(5); self.wait_idle()
         self.window.render_wifi_scan({**STATE,'networks':parse_scan(SCAN)})
         self.window.wifi_table.selectRow(0)
 

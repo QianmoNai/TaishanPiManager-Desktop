@@ -201,7 +201,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.19','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.20','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -459,7 +459,10 @@ class Window(QMainWindow):
             self.net_table.setRowCount(len(rows))
             for r,row in enumerate(rows):
                 for c,value in enumerate(row): self.net_table.setItem(r,c,QTableWidgetItem(value))
-            self.net_summary.setText(f'默认路由：{default or "未获取"} · USB 网卡通常为 eth1 或 enx…；支持 DHCP 自动获取地址。')
+            if not rows: self.net_summary.setText('未检测到网络接口，请检查 USB 网卡、网线、Wi-Fi 驱动或设备连接。')
+            elif not any(row[3] != '—' for row in rows): self.net_summary.setText('检测到网卡，但没有 IPv4 地址；请检查网线、DHCP 或 Wi-Fi 连接。')
+            elif not default: self.net_summary.setText('网络接口已发现，但没有默认路由，当前可能无法访问局域网或互联网。')
+            else: self.net_summary.setText(f'默认路由：{default} · USB 网卡通常为 eth1 或 enx…；支持 DHCP 自动获取地址。')
         self.work(lambda:self.api.adb.shell(self.serial,"ip -br addr; echo; ip route",timeout=5)[0],done,'正在读取网络接口状态…')
 
     def render_wifi_status(self,data):
@@ -514,6 +517,7 @@ class Window(QMainWindow):
         self.title.setText(names[index][0]); self.subtitle.setText(names[index][1])
         for i,btn in enumerate(self.nav): btn.setChecked(i==index)
         if refresh and index==0: self.poll()
+        if refresh and index==5: self.refresh_network_status()
         if index==4:
             self.plugin_detail.hide(); self.plugin_center.show()
             if refresh: self.refresh_plugins()

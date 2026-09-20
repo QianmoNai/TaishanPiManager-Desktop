@@ -129,6 +129,16 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.window.net_table.item(0,1).text(),'USB 网卡')
         self.assertEqual(self.window.net_table.item(0,4).text(),'是')
 
+    def test_network_page_auto_refreshes_and_warns_without_network(self):
+        self.connect_fake(); self.window.busy=False; self.window.go(5)
+        with patch.object(self.window,'refresh_network_status') as refresh:
+            self.window.go(5); QTest.qWait(120); refresh.assert_called()
+        def run_inline(fn,callback,*args,**kwargs): callback(fn())
+        with patch.object(self.window,'work',side_effect=run_inline), patch.object(self.api.adb,'shell',return_value=(b'','',0)):
+            self.window.busy=False
+            self.window.refresh_network_status()
+        self.assertIn('未检测到网络接口',self.window.net_summary.text())
+
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))
         self.window.work(lambda:time.sleep(.15),lambda data:None)

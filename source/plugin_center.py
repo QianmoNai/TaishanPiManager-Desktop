@@ -75,6 +75,8 @@ class PluginCenter(QWidget):
         self.traffic_open.setText('打开' if self.state in ('running','stopped','stale') else '查看详情')
         if hasattr(self.owner,'plugin_primary'):
             self.owner.plugin_primary.setText({'missing':'安装插件','update':'升级插件','stopped':'启动服务','running':'服务管理'}.get(self.state,'查看状态'))
+        if hasattr(self.owner,'uninstall_monitor_btn'):
+            self.owner.uninstall_monitor_btn.setVisible(self.state in ('running','stopped','update','stale','unknown','error'))
         messages={'running':'网络流量插件正在运行，可点击“打开”查看实时数据。',
             'stopped':'网络流量插件已安装，打开详情后可启动服务。',
             'missing':'网络流量插件尚未安装，打开详情即可离线安装。',

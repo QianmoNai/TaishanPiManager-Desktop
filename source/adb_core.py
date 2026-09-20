@@ -176,6 +176,9 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/monitor-uninstall':
+                from plugin_uninstall import uninstall
+                return uninstall(self.adb, serial, data)
             if path == '/api/plugin-status':
                 from monitor_plugin import status
                 return status(self.adb, serial)

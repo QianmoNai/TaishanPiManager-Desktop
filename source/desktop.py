@@ -200,7 +200,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.6','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.7','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -216,7 +216,7 @@ class Window(QMainWindow):
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
-        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary])
+        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn])
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
@@ -310,7 +310,8 @@ class Window(QMainWindow):
         frame,box=card(); row=QHBoxLayout(); tile=label(); tile.setPixmap(icon('wifi','#007aff',44).pixmap(44,44)); row.addWidget(tile)
         titles=QVBoxLayout(); titles.addWidget(label('网络流量','title')); titles.addWidget(label('v2.0 · 板端插件 · 本地安装','subtle')); row.addLayout(titles,1)
         self.plugin_primary=button('查看状态',self.plugin_primary_action,'primary'); row.addWidget(self.plugin_primary)
-        row.addWidget(button('管理',self.show_plugin_management)); box.addLayout(row)
+        row.addWidget(button('管理',self.show_plugin_management))
+        self.uninstall_monitor_btn=button('卸载插件',self.uninstall_monitor,'danger'); row.addWidget(self.uninstall_monitor_btn); box.addLayout(row)
         box.addWidget(label('实时上传与下载速度、双向网速测试、跨重启累计流量。','subtle',True))
         box.addWidget(label('适用：Buildroot / root ADB · 统计保存在设备本地 · 无需修改 SDK','caption',True)); detail.addWidget(frame)
         self.traffic=TrafficPanel(self); detail.addWidget(self.traffic)
@@ -668,6 +669,19 @@ class Window(QMainWindow):
             self.service_output.setPlainText(data['output']); self.notify('监控插件安装成功。')
             self.plugin_center.render({'state':'stopped'})
         self.work(lambda:self.call('monitor-install',{'confirm':True,'autostart':autostart}),completed,'正在上传、校验并安装监控插件…')
+
+    def uninstall_monitor(self):
+        if not self.require_device() or self.busy: return
+        if self.traffic.speed_busy:
+            self.notify('测速正在进行，请等待完成后卸载插件。',True); return
+        if not self.ask('卸载网络流量插件',f'将从设备 {self.serial} 卸载网络流量插件。\n\n停止监控服务，移除开机启动与插件程序。\n累计流量、日志和原有备份保留；重新安装后可以继续统计。\n\n确认卸载？'): return
+        def completed(data):
+            self.traffic.reset(); self.traffic.render({'state':'missing'})
+            self.plugin_center.render({'state':'missing'})
+            self.monitor_label.setText('插件已卸载，累计流量和日志已保留。')
+            self.service_output.setPlainText(data['output']); self.monitor_autostart.setChecked(False)
+            self.notify('网络流量插件已卸载，累计流量已保留。')
+        self.work(lambda:self.call('monitor-uninstall',{'confirm':True}),completed,'正在停止服务并卸载插件…')
 
     def reboot(self):
         if not self.require_device() or not self.ask('重启设备',f'确认重启 {self.serial}？\n当前运行的服务将中断。'): return

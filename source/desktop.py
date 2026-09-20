@@ -204,7 +204,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.27','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.28','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -833,6 +833,13 @@ QScrollBar::handle:vertical { background: #cdd1da; border-radius: 3px; min-heigh
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { color: #73737d; font-size: 12px; spacing: 7px; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 2px solid #8993a3; border-radius: 4px; background: #ffffff; }
+QCheckBox::indicator:unchecked:hover { border-color: #007aff; background: #edf4ff; }
+QCheckBox::indicator:checked { border-color: #007aff; background: #007aff; image: url("@CHECKMARK@"); }
+QCheckBox::indicator:checked:hover { border-color: #0062cc; background: #0062cc; }
+QCheckBox::indicator:disabled { border-color: #b7bdc7; background: #eceef2; }
+QCheckBox::indicator:checked:disabled { border-color: #8c9eb6; background: #8c9eb6; }
+QCheckBox:disabled { color: #969da8; }
 QToolTip { background: #fff; border: 1px solid #dedee5; padding: 8px; color: #444; }
 QPushButton#proxyNode { background: #f8faff; border: 1px solid #dfe5ef; border-radius: 12px; padding: 0; }
 QPushButton#proxyNode:hover { background: #edf4ff; border-color: #80b8ff; }
@@ -889,6 +896,13 @@ QHeaderView::section { background: #2c2c32; color: #b1b1bb; }
 QTableWidget::item { border-bottom-color: #34343b; }
 QScrollBar::handle:vertical { background: #50505c; }
 QCheckBox { color: #b9b9c4; }
+QCheckBox::indicator { border-color: #929eaf; background: #1c1c20; }
+QCheckBox::indicator:unchecked:hover { border-color: #88bcff; background: #263449; }
+QCheckBox::indicator:checked { border-color: #338df7; background: #1676e3; }
+QCheckBox::indicator:checked:hover { border-color: #8dc3ff; background: #2588f0; }
+QCheckBox::indicator:disabled { border-color: #606978; background: #292d34; }
+QCheckBox::indicator:checked:disabled { border-color: #627b9a; background: #485f7e; }
+QCheckBox:disabled { color: #818a99; }
 QPushButton#proxyNode { background: #292e38; border-color: #414957; }
 QPushButton#proxyNode:hover { background: #303f54; border-color: #629fec; }
 QPushButton#proxyNode[selected="true"] { background: #233f63; border: 2px solid #62aaff; }
@@ -902,6 +916,9 @@ QLabel#nodeDelay[tone="muted"] { color: #adb6c5; }
 QToolTip { background: #303038; border-color: #50505c; color: #f2f2f7; }
 '''
 
+
+_CHECKMARK=(Path(sys._MEIPASS) if getattr(sys,'frozen',False) else Path(__file__).resolve().parent)/'checkmark.svg'
+STYLE=STYLE.replace('@CHECKMARK@',_CHECKMARK.as_posix())
 
 def main():
     app=QApplication(sys.argv); app.setApplicationName('泰山派设备管理'); configure_app(app); app.setWindowIcon(app_icon())
@@ -918,7 +935,7 @@ def main():
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
             ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==6
             from proxy_plugin import ASSETS as PROXY_ASSETS
-            ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file()
+            ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

@@ -10,8 +10,7 @@ from monitor_plugin import ASSETS
 
 # Fixed public HTTP speed-test entries. No runtime directory request.
 # Keep order and host/port values aligned with public_speed.pl.
-NODES=(('上海 · 中国联通','mobile.shunicomtest.com',8080),
-       ('苏州 · JSQY','speedtest.jsqiuying.com',8080),
+NODES=(('苏州 · JSQY','speedtest.jsqiuying.com',8080),
        ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080),
        ('香港 · Leaseweb','speedtest1.hkg1.hk.leaseweb.net',80),
        ('新加坡 · Leaseweb','speedtest1.sin1.sg.leaseweb.net',80),

@@ -7,7 +7,6 @@ use Socket qw(inet_aton inet_ntoa);
 use Time::HiRes qw(time);
 use JSON::PP qw(encode_json);
 my @nodes=(
- ['Shanghai','mobile.shunicomtest.com',8080],
  ['Suzhou','speedtest.jsqiuying.com',8080],
  ['Kunshan','speedtest.dukekunshan.edu.cn',8080],
  ['Hong Kong','speedtest1.hkg1.hk.leaseweb.net',80],

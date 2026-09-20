@@ -46,7 +46,8 @@ class PublicSpeedTests(unittest.TestCase):
     def test_node_list_includes_domestic_and_overseas_entries(self):
         self.assertGreaterEqual(len(NODES),9)
         self.assertTrue(any('Leaseweb' in name for name,_,_ in NODES))
-        self.assertTrue(any(host.endswith('.cn') or 'shunicom' in host for _,host,_ in NODES))
+        self.assertTrue(any(host.endswith('.cn') for _,host,_ in NODES))
+        self.assertFalse(any('shunicom' in host for _,host,_ in NODES))
 
     def test_auto_interface_and_domestic_result(self):
         adb=FakeAdb(); messages=[];r=public_speed_test(adb,'usb','',messages.append)
@@ -82,8 +83,8 @@ class PublicUiTests(unittest.TestCase):
                 if not panel.connectivity_busy: break
         self.assertFalse(panel.connectivity_busy)
         self.assertEqual(panel.connectivity_table.item(0,3).text(),'10.0 ms')
-        self.assertEqual(panel.connectivity_table.item(9,3).text(),'—')
-        self.assertIn('2/10',panel.connectivity_hint.text())
+        self.assertEqual(panel.connectivity_table.item(8,3).text(),'—')
+        self.assertIn('2/9',panel.connectivity_hint.text())
         panel.reset()
         self.assertEqual(panel.connectivity_table.item(0,3).text(),'—')
 
@@ -96,11 +97,11 @@ class PublicUiTests(unittest.TestCase):
         from PySide6.QtTest import QTest
         self.connect_fake();panel=self.window.traffic;panel.timer.stop();panel.mode.setCurrentIndex(2)
         self.assertTrue(panel.host.isHidden());self.assertEqual('一键公网测速',panel.mode.currentText())
-        result={'node':'上海 · 中国联通','target':'mobile.shunicomtest.com:8080','interface':'wlan0','latency_ms':20,'download':GOOD,'upload':GOOD}
+        result={'node':'苏州 · JSQY','target':'speedtest.jsqiuying.com:8080','interface':'wlan0','latency_ms':20,'download':GOOD,'upload':GOOD}
         with patch.object(self.window,'ask',return_value=True),patch('traffic_widget.public_speed_test',return_value=result) as run:
             panel.test_speed()
             for _ in range(200):
                 QTest.qWait(10)
                 if not panel.speed_busy:break
             self.assertFalse(panel.speed_busy);self.assertEqual(run.call_args.args[2],'')
-        self.assertIn('上海',panel.result.text());self.assertIn('8.00 Mbps',panel.result.text())
+        self.assertIn('苏州',panel.result.text());self.assertIn('8.00 Mbps',panel.result.text())

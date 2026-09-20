@@ -89,11 +89,23 @@ class Adb:
             return self.locks.setdefault(serial, threading.Lock())
 
     def shell(self, serial, script, timeout=12, check=True):
-        return self.run(['-s', serial, 'exec-out', 'sh', '-c', shlex.quote(script)], timeout, check)
+        out, err, code = self.shell_input(serial, script, timeout)
+        if check and code:
+            raise UserError((err or out.decode('utf-8','replace') or '设备命令执行失败').strip())
+        return out, err, code
 
     def shell_input(self, serial, script, timeout=65):
         # Credentials travel through stdin, never host process arguments or files.
-        return self.run(['-s', serial, 'exec-out', 'sh', '-s'], timeout, False, script.encode('utf-8'))
+        # Rockchip adbd exec-out differs in quoting and does not forward stdin.
+        # A non-PTY shell supports stdin; our trailer preserves the remote exit code
+        # even when older adbd returns host exit code 0 for failed commands.
+        marker = ('__TSPI_EXIT_' + secrets.token_hex(12) + '__').encode('ascii')
+        wrapped = '(\n' + script + '\n) </dev/null\nresult=$?\nprintf "\\n' + marker.decode() + '%s\\n" "$result"\nexit 0\n'
+        out, err, host_code = self.run(['-s', serial, 'shell', '-T', 'sh', '-s'], timeout, False, wrapped.encode('utf-8'))
+        match = re.search(rb'\r?\n' + marker + rb'(\d+)\r?\n?\Z', out)
+        if not match:
+            raise UserError('设备命令未返回完整结果，请检查 ADB 连接。')
+        return out[:match.start()], err, int(match[1]) or host_code
 
 
 STATUS_SCRIPT = r'''
@@ -112,6 +124,7 @@ printf '\n@@end\n'
 
 
 def parse_status(raw):
+    raw = raw.replace('\r\n', '\n')
     sections = {}
     for match in re.finditer(r'@@(\w+)\n(.*?)(?=\n@@|\Z)', raw, re.S):
         sections[match[1]] = match[2].strip()
@@ -214,6 +227,8 @@ done
                     raise UserError('未知服务操作。')
                 if action!='status' and data.get('confirm') is not True:
                     raise UserError('请确认服务操作。')
+                _, _, exists = self.adb.shell(serial, 'test -x '+shlex.quote(SERVICE_CMDS[action]), check=False)
+                if exists: raise UserError('当前固件未安装网络健康监控脚本，暂时无法使用此项服务功能。')
                 out, _, _ = self.adb.shell(serial, shlex.quote(SERVICE_CMDS[action]), timeout=20)
                 return {'output': out.decode('utf-8', 'replace')}
             if path == '/api/reboot':
@@ -224,4 +239,3 @@ done
             raise UserError('不支持的操作。')
         finally:
             lock.release()
-

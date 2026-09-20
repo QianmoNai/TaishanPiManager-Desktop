@@ -1,6 +1,7 @@
 """Responsive node cards with measured Mihomo connectivity and cancellable batches."""
 from PySide6.QtCore import QTimer, Qt, Signal
 from selection_widgets import QComboBox
+from proxy_diagnostics_widget import DiagnosticsPanel
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QCheckBox, QFileDialog, QLineEdit, QPushButton, QSizePolicy, QLabel
 
 
@@ -91,6 +92,7 @@ class ProxyPanel(QWidget):
         self.empty=label('暂无节点，请先启动代理并刷新。','subtle',True); self.empty.setMinimumHeight(70); box.addWidget(self.empty)
         row=QHBoxLayout(); row.addWidget(label('测速地址','caption')); self.test_url=QLineEdit('https://www.gstatic.com/generate_204'); row.addWidget(self.test_url,1); self.controls.append(self.test_url); box.addLayout(row)
         box.addWidget(label('延迟为泰山派经该节点访问测速地址的耗时，超时 5 秒。不可达仅表示本次测试失败；REJECT 是拦截策略。','caption',True)); layout.addWidget(frame)
+        self.diagnostics=DiagnosticsPanel(self,label,button,card); layout.addWidget(self.diagnostics)
         toggle=button('配置与服务管理 ▸',self.toggle_management); layout.addWidget(toggle); self.management_toggle=toggle
         self.management=QWidget(); management=QVBoxLayout(self.management); management.setContentsMargins(0,0,0,0); layout.addWidget(self.management)
         frame,box=card(); box.addWidget(label('核心与配置','section')); box.addWidget(label('Mihomo 1.19.31 · ARM64 · HTTP/SOCKS 端口 7890','subtle'))
@@ -113,6 +115,7 @@ class ProxyPanel(QWidget):
         self.management.setVisible(not self.management.isVisible()); self.management_toggle.setText('配置与服务管理 ▾' if self.management.isVisible() else '配置与服务管理 ▸')
 
     def reset(self):
+        self.diagnostics.reset()
         self.cancel_tests(); self.epoch+=1; self.groups=[]; self.metadata={}; self.delays={}; self.group.clear(); self.grid.replace([]); self.search.clear(); self.autostart.setChecked(False); self.allow_lan.setChecked(False); self.subscription_url.clear(); self.mode.setCurrentIndex(0)
         self.state.setText('连接设备后查看状态。'); self.result.setText('安装核心并导入配置后，启动服务即可显示节点。'); self.progress.hide(); self.draw_nodes()
 
@@ -125,6 +128,7 @@ class ProxyPanel(QWidget):
             self.state.setText(titles.get(state,'待检测')+' · '+('已有配置' if data.get('configured') else '未配置'))
             self.saved_autostart=data.get('autostart',False); self.autostart.setChecked(self.saved_autostart); self.owner.plugin_center.render_proxy(data)
             if state!='running':
+                self.diagnostics.invalidate()
                 self.cancel_tests(); self.groups=[]; self.group.clear(); self.metadata={}; self.delays={}; self.draw_nodes()
             if state=='missing' or not data.get('configured'):
                 self.management.show(); self.management_toggle.setText('配置与服务管理 ▾')
@@ -180,6 +184,7 @@ class ProxyPanel(QWidget):
         def done(result):
             if owner.serial!=serial: return
             self.render(result)
+            if action in ('select','mode','import','start','restart','stop','uninstall'): self.diagnostics.invalidate()
             if action=='import' and data and 'url' in data: self.subscription_url.clear()
             if action=='select':
                 for g in self.groups:

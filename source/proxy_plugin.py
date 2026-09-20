@@ -260,6 +260,9 @@ def test_delays(adb,serial,data):
 
 
 def dispatch(adb, serial, action, data):
+    if action in ('websites','ip-info'):
+        from proxy_diagnostics import websites,ip_info
+        return websites(adb,serial,data) if action=='websites' else ip_info(adb,serial)
     if action == 'status': return status(adb, serial)
     if action == 'install': return install(adb, serial, data)
     if action == 'import': return import_config(adb, serial, data)

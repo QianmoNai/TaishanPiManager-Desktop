@@ -12,13 +12,8 @@ from monitor_plugin import ASSETS
 # Keep order and host/port values aligned with public_speed.pl.
 NODES=(('苏州 · JSQY','speedtest.jsqiuying.com',8080),
        ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080),
-       ('香港 · Leaseweb','speedtest1.hkg1.hk.leaseweb.net',80),
-       ('新加坡 · Leaseweb','speedtest1.sin1.sg.leaseweb.net',80),
-       ('东京 · Leaseweb','speedtest1.tyo1.jp.leaseweb.net',80),
-       ('法兰克福 · Leaseweb','speedtest1.fra1.de.leaseweb.net',80),
-       ('伦敦 · Leaseweb','speedtest1.lon1.uk.leaseweb.net',80),
-       ('纽约 · Leaseweb','speedtest1.nyc1.us.leaseweb.net',80),
-       ('旧金山 · Leaseweb','speedtest1.sfo1.us.leaseweb.net',80))
+       ('东京 · IPA CyberLab','speed.udx.icscoe.jp',8080),
+       ('首尔 · Kdatacenter','speedtest.kdatacenter.com',8080))
 
 
 def parse_result(raw):

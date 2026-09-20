@@ -9,13 +9,8 @@ use JSON::PP qw(encode_json);
 my @nodes=(
  ['Suzhou','speedtest.jsqiuying.com',8080],
  ['Kunshan','speedtest.dukekunshan.edu.cn',8080],
- ['Hong Kong','speedtest1.hkg1.hk.leaseweb.net',80],
- ['Singapore','speedtest1.sin1.sg.leaseweb.net',80],
- ['Tokyo','speedtest1.tyo1.jp.leaseweb.net',80],
- ['Frankfurt','speedtest1.fra1.de.leaseweb.net',80],
- ['London','speedtest1.lon1.uk.leaseweb.net',80],
- ['New York','speedtest1.nyc1.us.leaseweb.net',80],
- ['San Francisco','speedtest1.sfo1.us.leaseweb.net',80],
+ ['Tokyo IPA CyberLab','speed.udx.icscoe.jp',8080],
+ ['Seoul Kdatacenter','speedtest.kdatacenter.com',8080],
 );
 my ($mode,$ip,$index)=@ARGV;
 die "Invalid source IPv4\n" unless defined($ip) && $ip =~ /^\d+\.\d+\.\d+\.\d+$/;

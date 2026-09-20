@@ -44,8 +44,10 @@ class PublicSpeedTests(unittest.TestCase):
             public_speed_test(FailingProbeAdb(),'usb','wlan0')
 
     def test_node_list_includes_domestic_and_overseas_entries(self):
-        self.assertGreaterEqual(len(NODES),9)
-        self.assertTrue(any('Leaseweb' in name for name,_,_ in NODES))
+        self.assertEqual(len(NODES),4)
+        self.assertTrue(any('IPA CyberLab' in name for name,_,_ in NODES))
+        self.assertTrue(any('Kdatacenter' in name for name,_,_ in NODES))
+        self.assertFalse(any('Leaseweb' in name for name,_,_ in NODES))
         self.assertTrue(any(host.endswith('.cn') for _,host,_ in NODES))
         self.assertFalse(any('shunicom' in host for _,host,_ in NODES))
 
@@ -83,8 +85,8 @@ class PublicUiTests(unittest.TestCase):
                 if not panel.connectivity_busy: break
         self.assertFalse(panel.connectivity_busy)
         self.assertEqual(panel.connectivity_table.item(0,3).text(),'10.0 ms')
-        self.assertEqual(panel.connectivity_table.item(8,3).text(),'—')
-        self.assertIn('2/9',panel.connectivity_hint.text())
+        self.assertEqual(panel.connectivity_table.item(3,3).text(),'—')
+        self.assertIn('2/4',panel.connectivity_hint.text())
         panel.reset()
         self.assertEqual(panel.connectivity_table.item(0,3).text(),'—')
 

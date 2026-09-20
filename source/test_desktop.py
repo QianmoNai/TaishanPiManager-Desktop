@@ -77,8 +77,30 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.window.table.item(1,0).text(),"a'; test.txt")
         self.window.go(2); self.window.logs(); self.wait_idle(); self.assertIn('测试日志',self.window.log_output.toPlainText())
         self.window.go(3); self.assertFalse(self.window.terminal.connected)
+        self.assertEqual(self.window.terminal_tabs.count(),1)
+        self.window.new_terminal_tab(); self.assertEqual(self.window.terminal_tabs.count(),2)
+        self.window.close_current_terminal_tab(); self.assertEqual(self.window.terminal_tabs.count(),1)
         with patch.object(self.window.terminal,'connect_device') as connect:
             self.window.start_terminal(); connect.assert_called_once_with(self.api.adb.path,'usb-test')
+
+    def test_terminal_tab_isolation_controls_and_close(self):
+        from PySide6.QtWidgets import QPushButton
+        first=self.window.terminal; first.clear_screen(); first.feed('first session')
+        self.window.new_terminal_tab(); second=self.window.terminal
+        second.clear_screen(); second.feed('second session')
+        self.assertIsNot(first.process,second.process)
+        clear=next(b for b in self.window.findChildren(QPushButton) if b.text()=='清空显示')
+        clear.click()
+        self.assertIn('first session',''.join(first.screen.display))
+        self.assertNotIn('second session',''.join(second.screen.display))
+        second.connected=True
+        with patch.object(self.window,'ask',return_value=False): self.window.close_current_terminal_tab()
+        self.assertEqual(self.window.terminal_tabs.count(),2)
+        with patch.object(self.window,'ask',return_value=True): self.window.close_current_terminal_tab()
+        self.assertIs(self.window.terminal,first)
+        self.window.close_current_terminal_tab()
+        self.assertEqual(self.window.terminal_tabs.count(),1)
+        self.assertIsNot(self.window.terminal,first)
 
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))

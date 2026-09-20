@@ -73,6 +73,9 @@ class Terminal(QAbstractScrollArea):
         self.changed=True; self.repaint_timer.start()
         self.feed('泰山派交互终端\r\n选择设备后点击「连接终端」。\r\n')
 
+    def is_active(self):
+        return self.connected or self.process.state()!=QProcess.ProcessState.NotRunning
+
     def connect_device(self,adb,serial):
         if self.process.state()!=QProcess.ProcessState.NotRunning: return
         if not serial or not Path(adb).is_file():

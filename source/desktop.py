@@ -379,7 +379,7 @@ class Window(QMainWindow):
         self.wifi_show_password=QCheckBox('显示密码'); self.wifi_show_password.toggled.connect(lambda checked:self.wifi_password.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password))
         self.wifi_connect_btn=button('连接 Wi-Fi',self.connect_wifi,'primary'); row.addWidget(self.wifi_password,1); row.addWidget(self.wifi_show_password); row.addWidget(self.wifi_connect_btn); box.addLayout(row)
         box.addWidget(label('建议使用 USB 连接。切换 Wi-Fi 可能中断网络 ADB；密码不保存在电脑上。','caption',True))
-        box.addWidget(label('本次连接不写入开机配置。重启后由设备原有的网络配置决定。','caption',True)); layout.addWidget(frame); layout.addStretch()
+        box.addWidget(label('连接成功后会保存到泰山派的 wpa_supplicant 配置，重新上电将自动连接。','caption',True)); layout.addWidget(frame); layout.addStretch()
 
     def clear_wifi_selection(self, *args):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_table.setRowCount(0)

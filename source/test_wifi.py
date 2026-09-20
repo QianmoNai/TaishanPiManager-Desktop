@@ -40,14 +40,16 @@ class WifiBackendTests(unittest.TestCase):
             with self.assertRaises(UserError): Wifi(adb,'usb').connect(data)
         self.assertEqual(adb.scripts,[])
 
-    def test_connect_uses_derived_key_not_plaintext_and_no_save(self):
+    def test_connect_uses_derived_key_and_saves_config(self):
         reply=b'@@interface\nwlan0\n@@interfaces\nwlan0\n@@status\nwpa_state=COMPLETED\nssid=Test\nid=7\n@@connected\nyes\n'
         adb=FakeAdb(reply); password='test$pass\'word'; ssid=b'Test'
         result=Wifi(adb,'usb','wlan0').connect({'ssid_hex':ssid.hex(),'security':'psk','password':password})
         script=adb.scripts[0]
         self.assertNotIn(password,script)
         self.assertIn(hashlib.pbkdf2_hmac('sha1',password.encode(),ssid,4096,32).hex(),script)
-        self.assertNotIn('save_config',script)
+        self.assertIn('set update_config 1',script)
+        self.assertIn('save_config',script)
+        self.assertIn('priority 100',script)
         self.assertIn('尚未获取',result['message'])
 
     def test_device_errors_and_disconnect_are_safe(self):

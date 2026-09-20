@@ -101,6 +101,7 @@ ERRORS = {
     'START_FAILED': '无法启动无线服务，请检查驱动和板端日志。',
     'SCAN_FAILED': '无线扫描请求失败，请稍后重试。',
     'SETUP_FAILED': '无法配置选中的无线网络。',
+    'SAVE_FAILED': 'Wi-Fi 已连接，但无法保存开机配置。请检查 wpa_supplicant 配置文件是否可写。',
     'AUTH_TIMEOUT': '未能完成 Wi-Fi 认证，请检查密码、信号和路由器设置。已尝试恢复原网络。',
     'CONNECTION_LOST': 'Wi-Fi 认证后连接又中断了，请检查信号并刷新状态。',
 }
@@ -185,6 +186,7 @@ new_id=$(cli add_network)
 case "$new_id" in ''|*[!0-9]*) new_id=''; fail_setup;; esac
 ''' + f'cli set_network "$new_id" ssid {ssid_hex.lower()} | grep -q "^OK$" || fail_setup\n' + credential + r'''
 cli select_network "$new_id" | grep -q '^OK$' || fail_setup
+cli set_network "$new_id" priority 100 | grep -q '^OK$' || fail_setup
 authenticated=0
 count=0
 while [ "$count" -lt 30 ]; do
@@ -193,6 +195,9 @@ while [ "$count" -lt 30 ]; do
   count=$((count+1)); sleep 1
 done
 [ "$authenticated" = 1 ] || { echo ERR:AUTH_TIMEOUT; exit 1; }
+# Persist the selected network so wpa_supplicant can reconnect after reboot.
+cli set update_config 1 | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
+cli save_config | grep -q '^OK$' || { echo ERR:SAVE_FAILED; exit 1; }
 committed=1
 # Existing dhcpcd usually handles link events. Ask it to refresh this interface only.
 if command -v dhcpcd >/dev/null 2>&1; then

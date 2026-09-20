@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QWidget,QFrame,QLabel,QVBoxLayout,QHBoxLayout,QGridLayout,
     QComboBox,QPushButton,QLineEdit,QSpinBox,QMessageBox,QApplication)
 from traffic import speed_test
+from public_speed import public_speed_test
 
 
 def amount(value):
@@ -15,6 +16,7 @@ def amount(value):
 
 class Signals(QObject):
     done=Signal(object,object)
+    progress=Signal(str)
 
 
 class Task(QRunnable):
@@ -69,7 +71,7 @@ class TrafficPanel(QFrame):
         box.addLayout(metrics); self.graph=Graph(); box.addWidget(self.graph)
         self.note=QLabel('累计从首次启用统计起计算，按网卡分别保存；包含局域网、互联网及测速流量。')
         self.note.setWordWrap(True); self.note.setObjectName('caption'); box.addWidget(self.note)
-        row=QHBoxLayout(); self.mode=QComboBox(); self.mode.addItems(['与本电脑测速（局域网）','指定 iperf3 服务器'])
+        row=QHBoxLayout(); self.mode=QComboBox(); self.mode.addItems(['与本电脑测速（局域网）','指定 iperf3 服务器','一键公网测速（国内节点）'])
         row.addWidget(self.mode,1); self.start=QPushButton('开始测速'); self.start.setMinimumHeight(38)
         self.start.setProperty('kind','primary'); self.start.clicked.connect(self.test_speed); row.addWidget(self.start); box.addLayout(row)
         custom=QHBoxLayout(); self.host=QLineEdit(); self.host.setPlaceholderText('服务器 IPv4 / 域名（需运行 iperf3 -s）')
@@ -78,11 +80,19 @@ class TrafficPanel(QFrame):
         self.mode.currentIndexChanged.connect(lambda i:(self.host.setVisible(i==1),self.port.setVisible(i==1)))
         self.result=QLabel('上传、下载各测试 5 秒，结果以 Mbps 显示。局域网结果不代表宽带网速。')
         self.result.setWordWrap(True); self.result.setTextFormat(Qt.TextFormat.PlainText); box.addWidget(self.result)
+        self.mode.currentIndexChanged.connect(self.mode_hint)
         self.timer=QTimer(self); self.timer.setInterval(2000); self.timer.timeout.connect(self.poll); self.timer.start()
 
-    def run(self,key,fn,callback):
+    def mode_hint(self):
+        if self.speed_busy: return
+        self.result.setText('由泰山派直连上海／苏州／昆山节点；自动选点，无需填写地址。每次最多约 40 MiB 测试载荷。' if self.mode.currentIndex()==2 else '上传、下载各测试 5 秒，局域网结果不代表宽带网速。')
+
+    def run(self,key,fn,callback,on_progress=None):
         if key in self.tasks: return
         task=Task(fn); self.tasks[key]=task
+        if on_progress:
+            task.fn=lambda:fn(task.signals.progress.emit)
+            task.signals.progress.connect(on_progress)
         def done(data,error):
             self.tasks.pop(key,None); callback(data,error)
         task.signals.done.connect(done); self.pool.start(task)
@@ -135,16 +145,24 @@ class TrafficPanel(QFrame):
     def test_speed(self):
         if self.speed_busy or not self.owner.require_device(): return
         interface=self.iface.currentText()
-        if not interface: self.result.setText('请先启动监控并选择网卡。'); return
+        public=self.mode.currentIndex()==2
+        if not interface and not public: self.result.setText('请先启动监控并选择网卡。'); return
         host=self.host.text().strip() if self.mode.currentIndex()==1 else ''
         if self.mode.currentIndex()==1 and not host: self.result.setText('请填写运行 iperf3 的服务器地址。'); return
-        if not self.owner.ask('开始网速测试','测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。')): return
+        message=('将由泰山派连接中国大陆测速节点，自动选择上海、苏州或昆山。\n单节点最多下载 16 MiB、上传 4 MiB；失败时最多尝试 2 个节点（合计约 40 MiB 测试载荷，不含协议开销）。\n测试期间会占用带宽。无可达节点时报告失败，不切换到海外节点。' if public else '测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。'))
+        if not self.owner.ask('开始国内公网测速' if public else '开始网速测试',message): return
         serial=self.owner.serial; generation=self.generation; port=self.port.value()
-        self.speed_busy=True; self.start.setEnabled(False); self.result.setText('正在测速… 最多约 35 秒，实时流量继续更新。')
+        self.speed_busy=True; self.start.setEnabled(False); self.mode.setEnabled(False)
+        self.result.setText('正在测速… 最多约 100 秒。' if public else '正在测速… 最多约 35 秒，实时流量继续更新。')
         def done(data,error):
-            self.speed_busy=False; self.start.setEnabled(True)
+            self.speed_busy=False; self.start.setEnabled(True); self.mode.setEnabled(True)
             if serial!=self.owner.serial or generation!=self.generation:
                 self.result.setText('设备已切换，已忽略上一设备的测速结果。'); return
             if error: self.result.setText(error); return
-            self.result.setText(f'下载 {data["download"]["mbps"]:.2f} Mbps    上传 {data["upload"]["mbps"]:.2f} Mbps\n目标 {data["target"]} · {interface} · '+time.strftime('%H:%M:%S'))
-        self.run('speed',lambda:speed_test(self.owner.api.adb,serial,interface,host,port),done)
+            extra=(f'\n{data["node"]} · HTTP 响应延迟 {data["latency_ms"]:.0f} ms\n短时单连接结果，受 Wi-Fi 和节点负载影响。' if public else '')
+            self.result.setText(f'下载 {data["download"]["mbps"]:.2f} Mbps    上传 {data["upload"]["mbps"]:.2f} Mbps'+extra+f'\n目标 {data["target"]} · {data["interface"]} · '+time.strftime('%H:%M:%S'))
+        if public:
+            def update(message):
+                if serial==self.owner.serial and generation==self.generation: self.result.setText(message)
+            self.run('speed',lambda report:public_speed_test(self.owner.api.adb,serial,interface,report),done,update)
+        else: self.run('speed',lambda:speed_test(self.owner.api.adb,serial,interface,host,port),done)

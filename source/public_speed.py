@@ -1,0 +1,80 @@
+"""Domestic HTTP throughput tests on the board, with an offline node list."""
+import hashlib
+import json
+import math
+import re
+import secrets
+import shlex
+from adb_core import UserError
+from monitor_plugin import ASSETS
+
+# Mainland entries from the public Speedtest directory. No runtime directory
+# request, no overseas fallback. Keep order aligned with public_speed.pl.
+NODES=(('上海 · 中国联通','mobile.shunicomtest.com',8080),
+       ('苏州 · JSQY','speedtest.jsqiuying.com',8080),
+       ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080))
+
+
+def parse_result(raw):
+    try:
+        data=json.loads(raw.decode('utf-8','replace'))
+        if data.get('error'): raise UserError('节点测速失败：'+str(data['error']).strip())
+        for key in ('mbps','bytes','seconds'):
+            if type(data.get(key)) not in (int,float) or not math.isfinite(data[key]) or data[key]<=0: raise ValueError()
+        if data['bytes']>16777216 or data['seconds']>18: raise ValueError()
+        return data
+    except (ValueError,AttributeError,TypeError): raise UserError('测速节点没有返回有效的完整结果。')
+
+
+def public_speed_test(adb,serial,interface,progress=None):
+    progress=progress or (lambda message:None)
+    if interface and not re.fullmatch(r'[A-Za-z0-9_.:-]{1,32}',interface): raise UserError('请选择有效网卡。')
+    q=shlex.quote
+    command='ip -o -4 addr show dev '+q(interface) if interface else '''dev=$(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+[ -n "$dev" ] || { echo '没有默认网络路由，请先联网。'; exit 1; }
+ip -o -4 addr show dev "$dev"
+'''
+    raw,_,_=adb.shell(serial,command,timeout=5)
+    match=re.search(rb'inet (\d+\.\d+\.\d+\.\d+)/',raw)
+    if not match: raise UserError('所选网卡没有 IPv4 地址，请先连接 Wi-Fi 或网线。')
+    address=match[1].decode()
+    if not interface:
+        name=re.search(rb'^\d+:\s+([A-Za-z0-9_.:-]+)\s',raw)
+        if not name: raise UserError('无法识别默认网卡。')
+        interface=name[1].decode()
+    helper=ASSETS/'public_speed.pl'
+    if not helper.is_file(): raise UserError('公网测速组件缺失，请重新解压完整软件包。')
+    path='/tmp/tspi-public-speed-'+secrets.token_hex(12)+'.pl'
+    digest=hashlib.sha256(helper.read_bytes()).hexdigest()
+    try:
+        progress('正在准备国内公网测速…')
+        adb.run(['-s',serial,'push',str(helper),path],timeout=10)
+        adb.shell(serial,'test "$(sha256sum '+q(path)+' | cut -d " " -f 1)" = '+digest+' && LC_ALL=C LANG=C perl -c '+q(path),timeout=5)
+        prefix='LC_ALL=C LANG=C timeout 28 perl '+q(path)+' '
+        progress('正在检测上海、苏州、昆山节点…')
+        raw,_,_=adb.shell(serial,prefix+'probe '+q(address),timeout=31)
+        try:
+            nodes=json.loads(raw.decode())
+            if not isinstance(nodes,list): raise ValueError()
+            nodes=[n for n in nodes if isinstance(n,dict) and type(n.get('index')) is int and 0<=n['index']<len(NODES)
+                   and type(n.get('latency_ms')) in (int,float) and math.isfinite(n['latency_ms']) and 0<=n['latency_ms']<4000]
+            nodes.sort(key=lambda n:n['latency_ms'])
+        except (ValueError,TypeError): raise UserError('国内节点检测结果无效。')
+        if not nodes: raise UserError('国内测速节点暂时均不可达。请检查泰山派外网连接，或稍后重试。不会自动切换到海外节点。')
+        errors=[]
+        for n in nodes[:2]:
+            name,host,port=NODES[n['index']]
+            result={'mode':'public','node':name,'target':f'{host}:{port}','interface':interface,'latency_ms':n['latency_ms']}
+            try:
+                for mode,title in (('download','下载'),('upload','上传')):
+                    progress('正在测试'+title+' · '+name+'…')
+                    raw,_,code=adb.shell(serial,prefix+mode+' '+q(address)+' '+str(n['index']),timeout=31,check=False)
+                    result[mode]=parse_result(raw)
+                    if code: raise UserError('测试未正常完成。')
+            except UserError as exc:
+                errors.append(name+'：'+str(exc).split('\n')[0]);continue
+            return result
+        raise UserError('国内公网测速未完成。\n'+'\n'.join(errors)+'\n请稍后重试；不会以失败或局域网结果代替公网速度。')
+    finally:
+        try: adb.shell(serial,'rm -f '+q(path),timeout=5)
+        except UserError: pass

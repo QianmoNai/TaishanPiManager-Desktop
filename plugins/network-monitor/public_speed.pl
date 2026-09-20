@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# One-shot domestic HTTP speed test. No daemon, credentials or telemetry.
+# One-shot public HTTP speed test. No daemon, credentials or telemetry.
 use strict;
 use warnings;
 use IO::Socket::INET;
@@ -10,6 +10,13 @@ my @nodes=(
  ['Shanghai','mobile.shunicomtest.com',8080],
  ['Suzhou','speedtest.jsqiuying.com',8080],
  ['Kunshan','speedtest.dukekunshan.edu.cn',8080],
+ ['Hong Kong','speedtest1.hkg1.hk.leaseweb.net',80],
+ ['Singapore','speedtest1.sin1.sg.leaseweb.net',80],
+ ['Tokyo','speedtest1.tyo1.jp.leaseweb.net',80],
+ ['Frankfurt','speedtest1.fra1.de.leaseweb.net',80],
+ ['London','speedtest1.lon1.uk.leaseweb.net',80],
+ ['New York','speedtest1.nyc1.us.leaseweb.net',80],
+ ['San Francisco','speedtest1.sfo1.us.leaseweb.net',80],
 );
 my ($mode,$ip,$index)=@ARGV;
 die "Invalid source IPv4\n" unless defined($ip) && $ip =~ /^\d+\.\d+\.\d+\.\d+$/;
@@ -43,7 +50,7 @@ sub headers {
 sub request {
  my ($s,$n,$method,$file,$body_length)=@_;
  my $nonce=int(time*1000000);
- my $h="$method /speedtest/$file?x=$nonce HTTP/1.1\r\nHost: $nodes[$n][1]:$nodes[$n][2]\r\nUser-Agent: TaishanPiManager/2.8\r\nAccept-Encoding: identity\r\nCache-Control: no-cache\r\nConnection: close\r\n";
+  my $h="$method /speedtest/$file?x=$nonce HTTP/1.1\r\nHost: $nodes[$n][1]:$nodes[$n][2]\r\nUser-Agent: TaishanPiManager/2.10\r\nAccept-Encoding: identity\r\nCache-Control: no-cache\r\nConnection: close\r\n";
  $h.="Content-Type: application/x-www-form-urlencoded\r\nContent-Length: $body_length\r\n" if $method eq 'POST';
  send_all($s,$h."\r\n");
 }

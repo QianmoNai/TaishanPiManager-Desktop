@@ -8,11 +8,18 @@ import shlex
 from adb_core import UserError
 from monitor_plugin import ASSETS
 
-# Mainland entries from the public Speedtest directory. No runtime directory
-# request, no overseas fallback. Keep order aligned with public_speed.pl.
+# Fixed public HTTP speed-test entries. No runtime directory request.
+# Keep order and host/port values aligned with public_speed.pl.
 NODES=(('上海 · 中国联通','mobile.shunicomtest.com',8080),
        ('苏州 · JSQY','speedtest.jsqiuying.com',8080),
-       ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080))
+       ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080),
+       ('香港 · Leaseweb','speedtest1.hkg1.hk.leaseweb.net',80),
+       ('新加坡 · Leaseweb','speedtest1.sin1.sg.leaseweb.net',80),
+       ('东京 · Leaseweb','speedtest1.tyo1.jp.leaseweb.net',80),
+       ('法兰克福 · Leaseweb','speedtest1.fra1.de.leaseweb.net',80),
+       ('伦敦 · Leaseweb','speedtest1.lon1.uk.leaseweb.net',80),
+       ('纽约 · Leaseweb','speedtest1.nyc1.us.leaseweb.net',80),
+       ('旧金山 · Leaseweb','speedtest1.sfo1.us.leaseweb.net',80))
 
 
 def parse_result(raw):
@@ -47,11 +54,11 @@ ip -o -4 addr show dev "$dev"
     path='/tmp/tspi-public-speed-'+secrets.token_hex(12)+'.pl'
     digest=hashlib.sha256(helper.read_bytes()).hexdigest()
     try:
-        progress('正在准备国内公网测速…')
+        progress('正在准备公网测速…')
         adb.run(['-s',serial,'push',str(helper),path],timeout=10)
         adb.shell(serial,'test "$(sha256sum '+q(path)+' | cut -d " " -f 1)" = '+digest+' && LC_ALL=C LANG=C perl -c '+q(path),timeout=5)
         prefix='LC_ALL=C LANG=C timeout 28 perl '+q(path)+' '
-        progress('正在检测上海、苏州、昆山节点…')
+        progress('正在检测国内及海外节点…')
         raw,_,_=adb.shell(serial,prefix+'probe '+q(address),timeout=31)
         try:
             nodes=json.loads(raw.decode())
@@ -60,9 +67,9 @@ ip -o -4 addr show dev "$dev"
                    and type(n.get('latency_ms')) in (int,float) and math.isfinite(n['latency_ms']) and 0<=n['latency_ms']<4000]
             nodes.sort(key=lambda n:n['latency_ms'])
         except (ValueError,TypeError): raise UserError('国内节点检测结果无效。')
-        if not nodes: raise UserError('国内测速节点暂时均不可达。请检查泰山派外网连接，或稍后重试。不会自动切换到海外节点。')
+        if not nodes: raise UserError('公网测速节点暂时均不可达。请检查泰山派外网连接，或稍后重试。')
         errors=[]
-        for n in nodes[:2]:
+        for n in nodes:
             name,host,port=NODES[n['index']]
             result={'mode':'public','node':name,'target':f'{host}:{port}','interface':interface,'latency_ms':n['latency_ms']}
             try:
@@ -74,7 +81,7 @@ ip -o -4 addr show dev "$dev"
             except UserError as exc:
                 errors.append(name+'：'+str(exc).split('\n')[0]);continue
             return result
-        raise UserError('国内公网测速未完成。\n'+'\n'.join(errors)+'\n请稍后重试；不会以失败或局域网结果代替公网速度。')
+        raise UserError('公网测速未完成。\n'+'\n'.join(errors)+'\n请稍后重试；不会以失败或局域网结果代替公网速度。')
     finally:
         try: adb.shell(serial,'rm -f '+q(path),timeout=5)
         except UserError: pass

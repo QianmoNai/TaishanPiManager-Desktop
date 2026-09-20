@@ -149,8 +149,8 @@ class TrafficPanel(QFrame):
         if not interface and not public: self.result.setText('请先启动监控并选择网卡。'); return
         host=self.host.text().strip() if self.mode.currentIndex()==1 else ''
         if self.mode.currentIndex()==1 and not host: self.result.setText('请填写运行 iperf3 的服务器地址。'); return
-        message=('将由泰山派连接中国大陆测速节点，自动选择上海、苏州或昆山。\n单节点最多下载 16 MiB、上传 4 MiB；失败时最多尝试 2 个节点（合计约 40 MiB 测试载荷，不含协议开销）。\n测试期间会占用带宽。无可达节点时报告失败，不切换到海外节点。' if public else '测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。'))
-        if not self.owner.ask('开始国内公网测速' if public else '开始网速测试',message): return
+        message=('将由泰山派连接固定的国内及海外公网测速节点，先按延迟排序，再依次尝试上海、苏州、昆山、香港、新加坡、东京、法兰克福、伦敦、纽约和旧金山节点。\n单节点最多下载 16 MiB、上传 4 MiB；节点失败会自动尝试下一个，结果只来自同一个成功节点。\n测试期间会占用带宽。公网节点可能受跨境链路、运营商策略和节点负载影响。' if public else '测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。'))
+        if not self.owner.ask('开始公网测速' if public else '开始网速测试',message): return
         serial=self.owner.serial; generation=self.generation; port=self.port.value()
         self.speed_busy=True; self.start.setEnabled(False); self.mode.setEnabled(False)
         self.result.setText('正在测速… 最多约 100 秒。' if public else '正在测速… 最多约 35 秒，实时流量继续更新。')
@@ -159,7 +159,7 @@ class TrafficPanel(QFrame):
             if serial!=self.owner.serial or generation!=self.generation:
                 self.result.setText('设备已切换，已忽略上一设备的测速结果。'); return
             if error: self.result.setText(error); return
-            extra=(f'\n{data["node"]} · HTTP 响应延迟 {data["latency_ms"]:.0f} ms\n短时单连接结果，受 Wi-Fi 和节点负载影响。' if public else '')
+            extra=(f'\n{data["node"]} · HTTP 响应延迟 {data["latency_ms"]:.0f} ms\n短时单连接结果，受 Wi-Fi、跨境链路和节点负载影响。' if public else '')
             self.result.setText(f'下载 {data["download"]["mbps"]:.2f} Mbps    上传 {data["upload"]["mbps"]:.2f} Mbps'+extra+f'\n目标 {data["target"]} · {data["interface"]} · '+time.strftime('%H:%M:%S'))
         if public:
             def update(message):

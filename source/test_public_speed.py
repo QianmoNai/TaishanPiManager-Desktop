@@ -21,6 +21,11 @@ class FakeAdb:
         return b'','',0
 
 class PublicSpeedTests(unittest.TestCase):
+    def test_node_list_includes_domestic_and_overseas_entries(self):
+        self.assertGreaterEqual(len(NODES),9)
+        self.assertTrue(any('Leaseweb' in name for name,_,_ in NODES))
+        self.assertTrue(any(host.endswith('.cn') or 'shunicom' in host for _,host,_ in NODES))
+
     def test_auto_interface_and_domestic_result(self):
         adb=FakeAdb(); messages=[];r=public_speed_test(adb,'usb','',messages.append)
         self.assertEqual(r['interface'],'wlan0');self.assertEqual(r['node'],NODES[0][0]);self.assertEqual(r['mode'],'public')

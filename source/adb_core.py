@@ -176,6 +176,9 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/plugin-status':
+                from monitor_plugin import status
+                return status(self.adb, serial)
             if path == '/api/traffic-status':
                 from traffic import status
                 return status(self.adb, serial)

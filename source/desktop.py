@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from adb_core import Adb, App, UserError, MAX_TRANSFER, remote_path
 from terminal_widget import Terminal
 from traffic_widget import TrafficPanel
+from plugin_center import PluginCenter
 
 ICONS = {
     'wifi': '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
@@ -195,11 +196,11 @@ class Window(QMainWindow):
         names=QVBoxLayout(); names.setSpacing(2); names.addWidget(label('泰山派','brand')); names.addWidget(label('Device Manager','caption')); brand.addLayout(names); brand.addStretch(); side.addLayout(brand)
         side.addSpacing(30); side.addWidget(label('  设备管理','sideHeading')); side.addSpacing(5)
         self.nav=[]
-        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('服务与维护','settings'),('Wi-Fi 网络','wifi')]):
+        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('插件中心','settings'),('Wi-Fi 网络','wifi')]):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.5','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.6','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -215,7 +216,7 @@ class Window(QMainWindow):
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
-        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart])
+        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary])
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
@@ -302,17 +303,57 @@ class Window(QMainWindow):
         self.terminal.disconnect_device()
 
     def build_services(self):
-        layout=self.scroll_page(); self.traffic=TrafficPanel(self); layout.addWidget(self.traffic)
-        frame,box=card(); box.addWidget(label('流量监控插件','section')); self.monitor_label=label('采集网卡速度与累计流量，保存在泰山派本地。','subtle',True); box.addWidget(self.monitor_label)
+        layout=self.scroll_page()
+        self.plugin_center=PluginCenter(self,label,button,card,icon); layout.addWidget(self.plugin_center)
+        self.plugin_detail=QWidget(); detail=QVBoxLayout(self.plugin_detail); detail.setContentsMargins(0,0,0,0); detail.setSpacing(16)
+        row=QHBoxLayout(); row.addWidget(button('‹ 返回插件中心',self.close_plugin)); row.addStretch(); row.addWidget(label('网络工具 / 网络流量','caption')); detail.addLayout(row)
+        frame,box=card(); row=QHBoxLayout(); tile=label(); tile.setPixmap(icon('wifi','#007aff',44).pixmap(44,44)); row.addWidget(tile)
+        titles=QVBoxLayout(); titles.addWidget(label('网络流量','title')); titles.addWidget(label('v2.0 · 板端插件 · 本地安装','subtle')); row.addLayout(titles,1)
+        self.plugin_primary=button('查看状态',self.plugin_primary_action,'primary'); row.addWidget(self.plugin_primary)
+        row.addWidget(button('管理',self.show_plugin_management)); box.addLayout(row)
+        box.addWidget(label('实时上传与下载速度、双向网速测试、跨重启累计流量。','subtle',True))
+        box.addWidget(label('适用：Buildroot / root ADB · 统计保存在设备本地 · 无需修改 SDK','caption',True)); detail.addWidget(frame)
+        self.traffic=TrafficPanel(self); detail.addWidget(self.traffic)
+        frame,box=card(); self.plugin_management=frame; box.addWidget(label('安装与服务管理','section')); self.monitor_label=label('安装并启动后，可在上方查看实时网络数据。','subtle',True); box.addWidget(self.monitor_label)
         install_row=QHBoxLayout(); self.install_monitor_btn=button('安装 / 升级插件',self.install_monitor,'primary','settings'); install_row.addWidget(self.install_monitor_btn)
         self.monitor_autostart=QCheckBox('安装时启用开机自动启动'); install_row.addWidget(self.monitor_autostart); install_row.addStretch(); box.addLayout(install_row)
-        box.addWidget(label('离线安装，无需改 SDK。实时速度每 2 秒更新，累计流量跨重启保存。','caption',True))
-        box.addWidget(label('安装前请停止旧服务，安装后点击启动。仅统计流量，不再执行路由器或香橙派健康检查。','caption',True))
+        box.addWidget(label('安装前请停止旧服务。安装会校验文件并备份原版本，完成后手动启动。','caption',True))
         row=QHBoxLayout(); self.service_buttons=[]
         for title,action in [('查看状态','status'),('启动服务','start'),('停止服务','stop')]:
             btn=button(title,lambda checked=False,a=action:self.service(a),'primary' if action=='start' else 'secondary'); self.service_buttons.append(btn); row.addWidget(btn)
-        row.addStretch(); box.addLayout(row); self.service_output=self.console('连接设备后查看服务状态。'); self.service_output.setMinimumHeight(100); box.addWidget(self.service_output); layout.addWidget(frame)
-        frame,box=card(); box.addWidget(label('设备维护','section')); row=QHBoxLayout(); row.addWidget(label('重启将中断当前服务与 ADB 连接。','subtle',True),1); self.reboot_btn=button('重启设备',self.reboot,'danger','power'); row.addWidget(self.reboot_btn); box.addLayout(row); box.addWidget(label('固件烧录请使用瑞芯微烧录工具。','caption')); layout.addWidget(frame); layout.addStretch()
+        row.addStretch(); box.addLayout(row); self.service_output=self.console('连接设备后查看服务状态。'); self.service_output.setMinimumHeight(100); box.addWidget(self.service_output); detail.addWidget(frame)
+        layout.addWidget(self.plugin_detail); self.plugin_detail.hide(); self.plugin_center.detail_callback=self.open_plugin
+        layout.addStretch()
+
+    def open_plugin(self):
+        self.plugin_center.hide(); self.plugin_detail.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('网络流量'); self.subtitle.setText('插件详情 · 速度、测速与累计流量。')
+        QTimer.singleShot(0,self.traffic.poll)
+
+    def show_plugin_management(self):
+        self.stack.widget(4).ensureWidgetVisible(self.plugin_management,0,12)
+
+    def plugin_primary_action(self):
+        state=self.plugin_center.state
+        if state in ('missing','update'): self.install_monitor()
+        elif state=='stopped': self.service('start')
+        elif state=='running': self.show_plugin_management()
+        else: self.refresh_plugins()
+
+    def close_plugin(self):
+        self.plugin_detail.hide(); self.plugin_center.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('插件中心'); self.subtitle.setText('发现、安装与管理你的设备工具。')
+        self.refresh_plugins()
+
+    def refresh_plugins(self):
+        if not self.serial:
+            self.plugin_center.render({'state':'offline'}); return
+        if self.busy: return
+        self.plugin_center.render({'state':'unknown'})
+        self.plugin_center.hint.setText('正在读取当前设备的插件状态…')
+        self.work(lambda:self.call('plugin-status'),self.plugin_center.render,'正在刷新插件状态…')
 
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
@@ -418,11 +459,13 @@ class Window(QMainWindow):
 
     def go(self,index,refresh=True):
         self.stack.setCurrentIndex(index)
-        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('终端','持续会话，实时交互。'),('服务与维护','常用操作，触手可及。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
+        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('终端','持续会话，实时交互。'),('插件中心','发现、安装与管理你的设备工具。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
         self.title.setText(names[index][0]); self.subtitle.setText(names[index][1])
         for i,btn in enumerate(self.nav): btn.setChecked(i==index)
         if refresh and index==0: self.poll()
-        if refresh and index==4: QTimer.singleShot(0,self.traffic.poll)
+        if index==4:
+            self.plugin_detail.hide(); self.plugin_center.show()
+            if refresh: self.refresh_plugins()
 
     def set_busy(self,value):
         self.busy=value
@@ -449,6 +492,7 @@ class Window(QMainWindow):
         self.wifi_pending=False
         if silent:
             self.previous_cpu=None; self.set_badge(False,'连接中断'); self.activity.setText('设备状态已过期 · 请刷新连接')
+        if self.stack.currentIndex()==4: self.plugin_center.render({'state':'error'})
         self.notify(error,True)
 
     def require_device(self):
@@ -486,6 +530,9 @@ class Window(QMainWindow):
 
     def reset_data(self):
         self.traffic.reset()
+        self.plugin_center.render({'state':'unknown' if self.serial else 'offline'})
+        self.plugin_detail.hide(); self.plugin_center.show()
+        if self.stack.currentIndex()==4: self.go(4,False)
         self.terminal.disconnect_device(); self.terminal.clear_screen(); self.terminal_status.setText('未连接终端')
         self.clear_wifi_selection(); self.wifi_iface.blockSignals(True); self.wifi_iface.clear(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.blockSignals(False)
         self.previous_cpu=None; self.file_serial=''; self.rows=[]; self.table.setRowCount(0); self.file_hint.setText('打开目录后查看文件。')
@@ -524,7 +571,7 @@ class Window(QMainWindow):
         ratio=100*data['memoryUsed']/data['memoryTotal'] if data['memoryTotal'] else 0; mem.value.setText(f'{ratio:.1f}%'); mem.bar.setValue(round(ratio*10)); mem.detail.setText(bytes_text(data['memoryUsed'])+' / '+bytes_text(data['memoryTotal']))
         temp.value.setText(f'{data["temperature"]:.1f}°' if data['temperature'] is not None else '不支持'); temp.bar.setValue(min(1000,max(0,int((data['temperature'] or 0)*10)))); temp.detail.setText('摄氏度 · thermal_zone0')
         minutes=int(data['uptime']/60); uptime.value.setText(f'{minutes//1440}天 {minutes%1440//60}时' if minutes>=1440 else f'{minutes//60}时 {minutes%60}分'); uptime.bar.setValue(0); uptime.detail.setText('负载 '+' / '.join(data['load']))
-        self.monitor_label.setText('已检测到监控服务，流量面板会检查插件版本。' if data['monitorAvailable'] else '此设备未安装监控插件，可在“服务与维护”页面安装。')
+        self.monitor_label.setText('已检测到监控服务，流量面板会检查插件版本。' if data['monitorAvailable'] else '此设备未安装监控插件，可在“插件中心”安装。')
         self.clear_storage()
         for disk in data['disks']:
             group=QWidget(); layout=QVBoxLayout(group); layout.setContentsMargins(0,0,0,5); layout.setSpacing(7); row=QHBoxLayout(); row.addWidget(label(disk['mount'],'infoValue')); row.addStretch(); row.addWidget(label(disk['percent'],'caption')); layout.addLayout(row)
@@ -603,7 +650,11 @@ class Window(QMainWindow):
     def service(self,action):
         if not self.require_device(): return
         if action!='status' and not self.ask('确认服务操作',f'将在 {self.serial} 上'+('启动' if action=='start' else '停止')+'监控服务。'): return
-        self.work(lambda:self.call('service',{'action':action,'confirm':True}),lambda data:self.service_output.setPlainText(data['output'] or '操作完成'),'正在执行服务操作…')
+        def completed(data):
+            self.service_output.setPlainText(data['output'] or '操作完成')
+            self.plugin_center.render({'state':'unknown'})
+            QTimer.singleShot(0,self.refresh_plugins)
+        self.work(lambda:self.call('service',{'action':action,'confirm':True}),completed,'正在执行服务操作…')
 
     def install_monitor(self):
         if not self.require_device() or self.busy: return
@@ -615,6 +666,7 @@ class Window(QMainWindow):
         def completed(data):
             self.monitor_label.setText('监控插件已安装。可查看状态或启动服务。')
             self.service_output.setPlainText(data['output']); self.notify('监控插件安装成功。')
+            self.plugin_center.render({'state':'stopped'})
         self.work(lambda:self.call('monitor-install',{'confirm':True,'autostart':autostart}),completed,'正在上传、校验并安装监控插件…')
 
     def reboot(self):
@@ -660,6 +712,7 @@ QPushButton:pressed { background: #d4e3fc; }
 QPushButton[kind="primary"] { background: #007aff; color: white; }
 QPushButton[kind="primary"]:hover { background: #006ce3; }
 QPushButton[kind="danger"] { background: #ffefed; color: #e05248; }
+QPushButton[kind="filter"]:checked { background: #007aff; color: white; }
 QPushButton[kind="nav"] { text-align: left; background: transparent; color: #626571; padding-left: 14px; font-size: 13px; border-radius: 12px; }
 QPushButton[kind="nav"]:hover { background: #e1e7f0; }
 QPushButton[kind="nav"]:checked { background: #dceaff; color: #0069de; font-weight: 600; }
@@ -707,6 +760,7 @@ QPushButton:pressed { background: #395477; }
 QPushButton[kind="primary"] { background: #0a64ce; color: white; }
 QPushButton[kind="primary"]:hover { background: #1676e3; }
 QPushButton[kind="danger"] { background: #412b2c; color: #ff9c94; }
+QPushButton[kind="filter"]:checked { background: #007aff; color: white; }
 QPushButton[kind="nav"] { background: transparent; color: #b4b4bf; }
 QPushButton[kind="nav"]:hover { background: #292d36; }
 QPushButton[kind="nav"]:checked { background: #233956; color: #78b5ff; }
@@ -739,7 +793,7 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==5
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

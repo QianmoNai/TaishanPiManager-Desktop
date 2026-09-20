@@ -11,6 +11,24 @@ NAMES = ('traffic_sampler.pl','check_orangepi.pl','check_orangepi','check_monito
 ASSETS = (Path(sys._MEIPASS) if getattr(sys,'frozen',False) else Path(__file__).resolve().parent.parent)/'plugins/network-monitor'
 
 
+def status(adb, serial):
+    """Inspect only; a differing bundled script is an update, not uninstalled."""
+    digest=hashlib.sha256((ASSETS/'traffic_sampler.pl').read_bytes()).hexdigest()
+    script='''
+if [ ! -f /userdata/bin/traffic_sampler.pl ]; then
+  if [ -x /userdata/bin/status_check_monitor ]; then echo update; else echo missing; fi
+elif [ "$(sha256sum /userdata/bin/traffic_sampler.pl | cut -d ' ' -f 1)" != '''+shlex.quote(digest)+''' ]; then
+  echo update
+elif /userdata/bin/status_check_monitor | grep -q '^RUNNING '; then echo running
+else echo stopped
+fi
+'''
+    out,_,_=adb.shell(serial,script,timeout=8)
+    state=out.decode().strip()
+    if state not in ('update','missing','running','stopped'): raise UserError('无法识别插件状态，请检查板端服务。')
+    return {'state':state}
+
+
 def install(adb, serial, data):
     if data.get('confirm') is not True: raise UserError('请先确认安装监控插件。')
     autostart = data.get('autostart') is True

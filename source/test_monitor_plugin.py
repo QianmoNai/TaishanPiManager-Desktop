@@ -46,7 +46,7 @@ class MonitorUiTests(unittest.TestCase):
         with patch.object(self.window,'ask',return_value=False),patch.object(self.api,'dispatch') as call:
             self.window.install_monitor(); call.assert_not_called()
     def test_install_options_and_result(self):
-        self.connect_fake(); self.window.go(4); self.window.monitor_autostart.setChecked(True)
+        self.connect_fake(); self.window.go(4); self.wait_idle(); self.window.monitor_autostart.setChecked(True)
         with patch.object(self.window,'ask',return_value=True),patch.object(self.api,'dispatch',return_value={'output':'installed'}) as call:
             self.window.install_monitor(); self.assertFalse(self.window.install_monitor_btn.isEnabled()); self.wait_idle()
             self.assertTrue(call.call_args.args[1]['autostart'])

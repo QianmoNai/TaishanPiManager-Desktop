@@ -1,29 +1,19 @@
-"""Local-only ADB dashboard for TaishanPi. Python standard library only."""
+"""ADB transport and device operations. No browser or HTTP server."""
 from __future__ import annotations
 
-import argparse
-import ipaddress
-import json
-import mimetypes
 import os
 from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shlex
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
 import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, urlparse
-import webbrowser
 
 MAX_TRANSFER = 512 * 1024 * 1024
 MAX_OUTPUT = 2 * 1024 * 1024
-ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / 'web'
 PORTABLE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent.parent
 LOG_PATHS = {'kernel': None, 'system': '/var/log/messages', 'monitor': '/userdata/log/check_lan_monitor.log', 'autostart': '/userdata/log/check_monitor_autostart.log'}
 SERVICE_CMDS = {'status': '/userdata/bin/status_check_monitor', 'start': '/userdata/bin/start_check_monitor', 'stop': '/userdata/bin/stop_check_monitor'}
@@ -225,142 +215,3 @@ done
             lock.release()
 
 
-class Handler(BaseHTTPRequestHandler):
-    server_version = 'TaishanPiManager/1.0'
-
-    def log_message(self, *args):
-        pass
-
-    @property
-    def app(self):
-        return self.server.app
-
-    def send(self, status, body, content_type='application/json; charset=utf-8'):
-        if not isinstance(body, bytes):
-            body = json.dumps(body, ensure_ascii=False).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('X-Frame-Options', 'DENY')
-        self.end_headers()
-        self.wfile.write(body)
-
-    def authorized(self, token=True):
-        expected = f'127.0.0.1:{self.server.server_port}'
-        if self.headers.get('Host') != expected:
-            self.send(403, {'error':'无效的本机访问地址。'}); return False
-        origin = self.headers.get('Origin')
-        if origin and origin != 'http://'+expected:
-            self.send(403, {'error':'禁止跨站请求。'}); return False
-        if token and not secrets.compare_digest(self.headers.get('X-App-Token', ''), self.app.token):
-            self.send(403, {'error':'会话已失效，请刷新页面。'}); return False
-        return True
-
-    def do_GET(self):
-        if not self.authorized(False): return
-        path = urlparse(self.path).path
-        if path == '/':
-            html = (ASSETS/'index.html').read_text(encoding='utf-8').replace('__APP_TOKEN__', self.app.token)
-            self.send(200, html.encode('utf-8'), 'text/html; charset=utf-8')
-        elif path in ('/app.js', '/style.css'):
-            self.send(200, (ASSETS/path[1:]).read_bytes(), 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
-        else:
-            self.send(404, {'error':'页面不存在'})
-
-    def do_POST(self):
-        if not self.authorized(): return
-        try:
-            size = int(self.headers.get('Content-Length', '0'))
-            if size < 0: raise UserError('无效的数据长度。')
-            if urlparse(self.path).path == '/api/upload':
-                return self.upload(size)
-            if size > 16384: raise UserError('请求过大。')
-            data = json.loads(self.rfile.read(size) or b'{}')
-            if not isinstance(data, dict): raise UserError('无效请求。')
-            if self.path == '/api/download': return self.download(data)
-            if self.path == '/api/quit':
-                self.send(200, {'message':'管理服务已退出，可关闭此页面。'})
-                threading.Thread(target=self.server.shutdown, daemon=True).start()
-                return
-            self.send(200, self.app.dispatch(self.path, data))
-        except (UserError, ValueError) as exc:
-            self.send(400, {'error':str(exc)})
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-        except Exception:
-            self.send(500, {'error':'操作失败，请检查设备连接和路径后重试。'})
-
-    def upload(self, size):
-        if size > MAX_TRANSFER: raise UserError('单个文件上限为 512 MB。固件刷写请使用专用烧录工具。')
-        query = parse_qs(urlparse(self.path).query)
-        data = {key:values[0] for key, values in query.items()}
-        if data.get('confirm') != 'yes': raise UserError('上传需要确认目标路径。')
-        dest = remote_path(data.get('path', ''))
-        if dest == '/': raise UserError('目标必须包含文件名。')
-        serial, lock = self.app.device(data)
-        try:
-            with tempfile.TemporaryDirectory(prefix='tspi-upload-') as tmp:
-                source = Path(tmp)/'payload'
-                self.connection.settimeout(60)
-                with source.open('wb') as file:
-                    remaining = size
-                    while remaining:
-                        chunk = self.rfile.read(min(1024*1024, remaining))
-                        if not chunk: raise UserError('上传中断。')
-                        file.write(chunk); remaining -= len(chunk)
-                out, _, _ = self.app.adb.run(['-s', serial, 'push', str(source), dest], timeout=180)
-                self.send(200, {'message':'上传完成', 'output':out.decode('utf-8','replace')})
-        finally:
-            lock.release()
-
-    def download(self, data):
-        source = remote_path(data.get('path', ''))
-        serial, lock = self.app.device(data)
-        try:
-            raw, _, _ = self.app.adb.shell(serial, 'test -f '+shlex.quote(source)+' && stat -Lc %s '+shlex.quote(source))
-            size = int(raw.strip())
-            if size > MAX_TRANSFER: raise UserError('单个下载文件上限为 512 MB。')
-            with tempfile.TemporaryDirectory(prefix='tspi-download-') as tmp:
-                local = Path(tmp)/'payload'
-                self.app.adb.run(['-s', serial, 'pull', source, str(local)], timeout=180)
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/octet-stream')
-                self.send_header('Content-Length', str(local.stat().st_size))
-                self.send_header('Content-Disposition', "attachment; filename*=UTF-8''"+quote(PurePosixPath(source).name))
-                self.send_header('Cache-Control','no-store')
-                self.end_headers()
-                with local.open('rb') as file:
-                    shutil.copyfileobj(file, self.wfile)
-        finally:
-            lock.release()
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--port', type=int, default=18766)
-    parser.add_argument('--no-browser', action='store_true')
-    parser.add_argument('--adb')
-    args = parser.parse_args()
-    try:
-        server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
-    except OSError:
-        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    server.daemon_threads = True
-    server.app = App(Adb(args.adb))
-    url = f'http://127.0.0.1:{server.server_port}'
-    if not args.no_browser:
-        webbrowser.open(url)
-    if sys.stdout:
-        print(url, flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-
-
-if __name__ == '__main__':
-    main()

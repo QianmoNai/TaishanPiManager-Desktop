@@ -2,7 +2,7 @@
 
 泰山派设备管理工具。本仓库按本地保存的版本快照重建 Git 历史。
 
-当前快照：**v1.0**，来源目录：`TaishanPiManager`。
+当前快照：**desktop-initial**，来源目录：`TaishanPiManager-Desktop`。
 
 每个快照对应一个提交及标签；提交时间是导入时间，不代表原始开发时间。`desktop-initial` 保留早期未编号的桌面目录（其界面已标注 v2.1），`v2.1` 保留后续独立目录。
 
@@ -13,3 +13,4 @@
 ## 历史版本
 
 - `v1.0` — `TaishanPiManager`
+- `desktop-initial` — `TaishanPiManager-Desktop`

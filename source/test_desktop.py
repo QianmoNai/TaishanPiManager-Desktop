@@ -121,6 +121,14 @@ class DesktopTests(unittest.TestCase):
             self.wait_idle()
         self.assertEqual(self.window.address.text(),'192.168.1.148:5555')
 
+    def test_network_page_shows_usb_adapter(self):
+        self.connect_fake(); self.window.go(5)
+        with patch.object(self.api.adb,'shell',return_value=(b'eth1             UP             192.168.1.199/24\n\ndefault via 192.168.1.1 dev eth1\n','',0)), patch.object(self.window,'work',side_effect=lambda fn,callback,*args,**kwargs:callback(fn())):
+            self.window.refresh_network_status(); self.wait_idle()
+        self.assertEqual(self.window.net_table.rowCount(),1)
+        self.assertEqual(self.window.net_table.item(0,1).text(),'USB 网卡')
+        self.assertEqual(self.window.net_table.item(0,4).text(),'是')
+
     def test_background_responsiveness_and_failure(self):
         ticks=[]; QTimer.singleShot(20,lambda:ticks.append(True))
         self.window.work(lambda:time.sleep(.15),lambda data:None)

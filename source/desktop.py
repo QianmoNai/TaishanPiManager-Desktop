@@ -197,11 +197,11 @@ class Window(QMainWindow):
         names=QVBoxLayout(); names.setSpacing(2); names.addWidget(label('泰山派','brand')); names.addWidget(label('Device Manager','caption')); brand.addLayout(names); brand.addStretch(); side.addLayout(brand)
         side.addSpacing(30); side.addWidget(label('  设备管理','sideHeading')); side.addSpacing(5)
         self.nav=[]
-        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('插件中心','settings'),('Wi-Fi 网络','wifi')]):
+        for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('插件中心','settings'),('网络设置','wifi')]):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.18','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.19','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -388,7 +388,10 @@ class Window(QMainWindow):
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
         layout=self.scroll_page(); frame,box=card()
-        row=QHBoxLayout(); row.addWidget(label('附近的 Wi-Fi','section')); row.addStretch()
+        frame,box=card(); row=QHBoxLayout(); row.addWidget(label('网络设置','title')); row.addStretch(); self.net_status_btn=button('刷新网络状态',self.refresh_network_status,symbol='refresh'); row.addWidget(self.net_status_btn); box.addLayout(row)
+        self.net_summary=label('连接设备后查看 Wi-Fi、USB 网卡和默认路由。','subtle',True); box.addWidget(self.net_summary)
+        self.net_table=QTableWidget(0,5); self.net_table.setHorizontalHeaderLabels(['接口','类型','链路','IPv4 地址','默认路由']); self.net_table.verticalHeader().hide(); self.net_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.net_table.setMinimumHeight(150); box.addWidget(self.net_table); layout.addWidget(frame)
+        frame,box=card(); row=QHBoxLayout(); row.addWidget(label('附近的 Wi-Fi','section')); row.addStretch()
         self.wifi_iface=QComboBox(); self.wifi_iface.addItem('自动选择网卡',''); self.wifi_iface.setAccessibleName('无线网卡')
         self.wifi_iface.currentIndexChanged.connect(self.clear_wifi_selection); row.addWidget(self.wifi_iface)
         self.wifi_scan_btn=button('扫描附近 Wi-Fi',self.scan_wifi,'primary','wifi'); row.addWidget(self.wifi_scan_btn)
@@ -441,6 +444,24 @@ class Window(QMainWindow):
         self.wifi_pending=True
         self.work(lambda:self.call('wifi-status',data),self.render_wifi_status,'正在读取 Wi-Fi 状态…')
 
+    def refresh_network_status(self):
+        if not self.require_device() or self.busy: return
+        def done(raw):
+            text=raw.decode('utf-8','replace'); rows=[]
+            route=re.search(r'(?m)^default via (\S+) dev (\S+)',text); default=route.group(2) if route else ''
+            for line in text.splitlines():
+                fields=line.split(None,3)
+                if len(fields)<3 or fields[0]=='default': continue
+                iface,state,rest=fields[0],fields[1],fields[2:]
+                ip=rest[-1] if rest else '—'
+                kind='USB 网卡' if iface.startswith(('eth','enx')) and iface!='eth0' else ('Wi-Fi' if iface.startswith(('wl','wlan')) else '有线网卡')
+                rows.append((iface,kind,state,ip,'是' if iface==default else ''))
+            self.net_table.setRowCount(len(rows))
+            for r,row in enumerate(rows):
+                for c,value in enumerate(row): self.net_table.setItem(r,c,QTableWidgetItem(value))
+            self.net_summary.setText(f'默认路由：{default or "未获取"} · USB 网卡通常为 eth1 或 enx…；支持 DHCP 自动获取地址。')
+        self.work(lambda:self.api.adb.shell(self.serial,"ip -br addr; echo; ip route",timeout=5)[0],done,'正在读取网络接口状态…')
+
     def render_wifi_status(self,data):
         self.wifi_iface.blockSignals(True); self.wifi_iface.clear()
         for name in data['interfaces']: self.wifi_iface.addItem(name,name)
@@ -489,7 +510,7 @@ class Window(QMainWindow):
 
     def go(self,index,refresh=True):
         self.stack.setCurrentIndex(index)
-        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('终端','持续会话，实时交互。'),('插件中心','发现、安装与管理你的设备工具。'),('Wi-Fi 网络','发现附近网络，让泰山派接入 Wi-Fi。')]
+        names=[('设备概览','一眼掌握，设备的每个状态。'),('文件管理','在设备与电脑之间，轻松传输。'),('系统日志','让每一个问题，有迹可循。'),('终端','持续会话，实时交互。'),('插件中心','发现、安装与管理你的设备工具。'),('网络设置','管理 Wi-Fi、USB 网卡与网络路由。')]
         self.title.setText(names[index][0]); self.subtitle.setText(names[index][1])
         for i,btn in enumerate(self.nav): btn.setChecked(i==index)
         if refresh and index==0: self.poll()

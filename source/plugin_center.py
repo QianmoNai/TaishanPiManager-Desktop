@@ -27,7 +27,7 @@ class PluginCenter(QWidget):
         items=[
             ('traffic','网络流量','实时速度、双向测速与累计流量，清晰掌握每一次收发。','网络','wifi','#007aff','v2.0 · 随软件提供',None),
             ('proxy','网络代理','Mihomo 核心安装、配置导入、规则分流与策略组切换。','网络','usb','#8b5cf6','Mihomo 1.19.31 · ARM64',None),
-            ('ld06','LD06 雷达视图','可选下载安装，UART3 雷达实时扫描、距离显示与点云导出。','系统','settings','#30b89a','v1.0 · 可选安装',None),
+            ('ld06','LD06 雷达视图','可选安装，UART3 雷达实时扫描、距离显示与点云导出。','系统','settings','#30b89a','v1.0 · 可选安装',None),
             ('serial','串口助手','UART3 排针串口参数、文本/HEX 收发、VOFA 协议波形与引脚配置。','系统','usb','#e5a13d','内置工具 · ADB 串口会话',None),
             ('rgb','RGB 灯控制','控制板载 RGB 灯亮灭、预设颜色与独立红绿蓝通道。','系统','settings','#e35d6a','内置工具 · ADB LED 控制',None),
             ('pin','引脚助手','GPIO、I2C、SPI、PWM 引脚资源查看与硬件调试。','系统','settings','#2d9cdb','内置工具 · ADB 硬件会话',None),

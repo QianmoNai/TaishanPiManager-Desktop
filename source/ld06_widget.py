@@ -47,9 +47,9 @@ class RadarPanel(QWidget):
         frame,box=card(); box.addWidget(label('LD06 雷达视图','section'))
         box.addWidget(label('可选插件 · UART3 /dev/ttyS3 · 230400 · 8N1','subtle',True))
         self.install_state=label('尚未检测安装状态','caption'); box.addWidget(self.install_state)
-        row=QHBoxLayout(); row.addWidget(button('下载插件包',self.download)); self.install_btn=button('安装 / 升级到泰山派',lambda:self.action('install'),'primary'); row.addWidget(self.install_btn)
+        row=QHBoxLayout(); self.install_btn=button('安装 / 升级到泰山派',lambda:self.action('install'),'primary'); row.addWidget(self.install_btn)
         self.status_btn=button('刷新状态',lambda:self.action('status')); row.addWidget(self.status_btn); self.remove_btn=button('卸载',lambda:self.action('uninstall')); row.addWidget(self.remove_btn); box.addLayout(row)
-        box.addWidget(label('下载保存离线 ZIP 插件包；安装使用随软件提供的校验文件，不需要联网或编译 SDK。','caption',True)); layout.addWidget(frame)
+        box.addWidget(label('点击安装即可将采集程序安装到泰山派，不需要联网或编译 SDK。','caption',True)); layout.addWidget(frame)
         frame,box=card(); box.addWidget(label('实时扫描','section')); row=QHBoxLayout()
         self.start_btn=button('开始采集',self.start,'primary'); row.addWidget(self.start_btn); row.addWidget(button('停止采集',self.stop))
         row.addWidget(button('导出当前点云',self.export)); box.addLayout(row)
@@ -70,11 +70,6 @@ class RadarPanel(QWidget):
             self.install_state.setText({'missing':'未安装','installed':'已安装 · v1.0','update':'可升级'}[result['state']])
             self.owner.plugin_center.render_ld06(result)
         self.owner.work(lambda:getattr(plugin,action)(self.owner.api.adb,serial),done,'正在处理 LD06 插件…')
-    def download(self):
-        path,_=QFileDialog.getSaveFileName(self,'下载离线插件包','ld06-radar-v1.0.zip','ZIP (*.zip)')
-        if path:
-            try: plugin.export_package(path); self.owner.notify('插件包已保存：'+path)
-            except OSError as exc: self.owner.notify('保存失败：'+str(exc),True)
     def start(self):
         if self.active() or self.owner.busy or not self.owner.require_device(): return
         serial=self.owner.serial; epoch=self.epoch; self.preparing=True

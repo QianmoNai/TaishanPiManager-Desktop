@@ -13,7 +13,7 @@ class PluginCenter(QWidget):
         intro.addWidget(label('为你的泰山派，添加更多可能。','heroTitle',True))
         intro.addWidget(label('发现工具，管理插件，让常用功能各就其位。','heroSub',True)); row.addLayout(intro,1)
         art=label(); art.setPixmap(icon('settings','#007aff',58).pixmap(58,58)); row.addWidget(art); box.addLayout(row)
-        self.summary=label('2 款可安装插件 · 6 项内置工具','heroCaption'); box.addWidget(self.summary); layout.addWidget(hero)
+        self.summary=label('2 款可安装插件 · 7 项内置工具','heroCaption'); box.addWidget(self.summary); layout.addWidget(hero)
         row=QHBoxLayout(); self.search=QLineEdit(); self.search.setPlaceholderText('搜索插件或工具'); self.search.setClearButtonEnabled(True)
         self.search.setAccessibleName('搜索插件'); self.search.textChanged.connect(self.filter_cards); row.addWidget(self.search,1)
         self.refresh=button('刷新插件状态',owner.refresh_plugins,symbol='refresh'); row.addWidget(self.refresh); layout.addLayout(row)
@@ -29,6 +29,7 @@ class PluginCenter(QWidget):
             ('proxy','网络代理','Mihomo 核心安装、配置导入、规则分流与策略组切换。','网络','usb','#8b5cf6','Mihomo 1.19.31 · ARM64',None),
             ('serial','串口助手','UART3 排针串口参数、文本/HEX 收发、VOFA 协议波形与引脚配置。','系统','usb','#e5a13d','内置工具 · ADB 串口会话',None),
             ('rgb','RGB 灯控制','控制板载 RGB 灯亮灭、预设颜色与独立红绿蓝通道。','系统','settings','#e35d6a','内置工具 · ADB LED 控制',None),
+            ('pin','引脚助手','GPIO、I2C、SPI、PWM 引脚资源查看与硬件调试。','系统','settings','#2d9cdb','内置工具 · ADB 硬件会话',None),
             ('wifi','网络设置','管理 Wi-Fi、USB 网卡与网络路由。','网络','wifi','#30b86b','内置工具 · 无需安装',5),
             ('terminal','交互终端','持续 Shell 会话，彩色输出、补全与快捷操作。','系统','terminal','#8b5cf6','内置工具 · 无需安装',3),
             ('files','文件管理','浏览设备目录，在电脑与泰山派之间传输文件。','系统','folder','#ee9a24','内置工具 · 无需安装',1),
@@ -41,7 +42,7 @@ class PluginCenter(QWidget):
             badge=label('待检测' if key in ('traffic','proxy') else '内置','badge'); row.addWidget(badge); box.addLayout(row)
             box.addWidget(label(description,'subtle',True)); box.addStretch()
             row=QHBoxLayout(); row.addWidget(label(category+' · '+('板端插件' if key in ('traffic','proxy') else '桌面工具'),'caption')); row.addStretch()
-            open_btn=button('查看详情' if key in ('traffic','proxy') else '打开',lambda checked=False,p=page,k=key:owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy') else 'secondary')
+            open_btn=button('查看详情' if key in ('traffic','proxy') else '打开',lambda checked=False,p=page,k=key:owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_pin() if k=='pin' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy') else 'secondary')
             row.addWidget(open_btn); box.addLayout(row)
             if key=='traffic': self.traffic_badge=badge; self.traffic_open=open_btn
             if key=='proxy': self.proxy_badge=badge

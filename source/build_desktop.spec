@@ -6,7 +6,7 @@ a = Analysis(
     [str(Path(SPECPATH) / 'desktop.py')],
     pathex=[],
     binaries=[],
-    datas=[(str(Path(SPECPATH) / 'checkmark.svg'), '.')]+[(str(Path(SPECPATH).parent / 'plugins' / name), 'plugins/'+name) for name in ('network-monitor','network-proxy','serial-assistant')],
+    datas=[(str(Path(SPECPATH) / 'checkmark.svg'), '.')]+[(str(Path(SPECPATH).parent / 'plugins' / name), 'plugins/'+name) for name in ('network-monitor','network-proxy','serial-assistant','pin-assistant')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

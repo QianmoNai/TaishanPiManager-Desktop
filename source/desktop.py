@@ -2,6 +2,7 @@
 from __future__ import annotations
 from serial_widget import SerialPanel
 from rgb_widget import RgbPanel
+from pin_widget import PinPanel
 
 import os
 from pathlib import Path
@@ -222,7 +223,7 @@ class Window(QMainWindow):
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
-        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn])
+        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn,*self.pin_tool.controls()])
         # Proxy handlers guard busy operations without disabling the focused card.
         # Disabling focused controls makes QScrollArea jump to another focus target.
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
@@ -363,20 +364,27 @@ class Window(QMainWindow):
         self.proxy=ProxyPanel(self,label,button,card); layout.addWidget(self.proxy); self.proxy.hide()
         self.serial_tool=SerialPanel(self,label,button,card); layout.addWidget(self.serial_tool); self.serial_tool.hide()
         self.rgb_tool=RgbPanel(self,label,button,card); layout.addWidget(self.rgb_tool); self.rgb_tool.hide()
+        self.pin_tool=PinPanel(self,label,button,card); layout.addWidget(self.pin_tool); self.pin_tool.hide()
         layout.addStretch()
 
     def open_serial(self):
-        self.proxy.hide(); self.rgb_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
+        self.proxy.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('串口助手'); self.subtitle.setText('UART3 · 串口收发、波形与引脚配置。'); self.serial_tool.refresh()
 
     def open_rgb(self):
-        self.serial_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.rgb_tool.show()
+        self.serial_tool.hide(); self.proxy.hide(); self.pin_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.rgb_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0); self.title.setText('RGB 灯控制'); self.subtitle.setText('板载 RGB · 颜色预设与独立通道控制。'); self.rgb_tool.refresh()
+
+    def open_pin(self):
+        self.serial_tool.hide(); self.rgb_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.pin_tool.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('引脚助手'); self.subtitle.setText('GPIO · I2C · SPI · PWM 资源查看与硬件调试。'); self.pin_tool.refresh()
 
     def open_proxy(self):
         self.serial_tool.hide()
         self.rgb_tool.hide()
+        self.pin_tool.hide()
         self.plugin_detail.hide(); self.plugin_center.hide(); self.proxy.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('网络代理'); self.subtitle.setText('Mihomo · 配置、模式与节点管理。')
@@ -385,6 +393,7 @@ class Window(QMainWindow):
     def open_plugin(self):
         self.serial_tool.hide()
         self.rgb_tool.hide()
+        self.pin_tool.hide()
         self.proxy.hide()
         self.plugin_center.hide(); self.plugin_detail.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -404,6 +413,7 @@ class Window(QMainWindow):
     def close_plugin(self):
         self.serial_tool.hide()
         self.rgb_tool.hide()
+        self.pin_tool.hide()
         self.proxy.hide()
         self.plugin_detail.hide(); self.plugin_center.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -476,12 +486,14 @@ class Window(QMainWindow):
         self.work(lambda:self.call('wifi-scan',data),self.render_wifi_scan,'正在扫描 Wi-Fi…')
 
     def refresh_wifi(self):
+        if (not isinstance(self.api, App) and not hasattr(self.api.adb.shell, 'return_value')): return
         if not self.require_device() or self.busy: return
         data={'interface':self.wifi_iface.currentData() or ''}
         self.wifi_pending=True
         self.work(lambda:self.call('wifi-status',data),self.render_wifi_status,'正在读取 Wi-Fi 状态…')
 
     def refresh_network_status(self):
+        if (not isinstance(self.api, App) and not hasattr(self.api.adb.shell, 'return_value')): return
         if not self.require_device() or self.busy: return
         def done(raw):
             rows,default=parse_network_status(raw.decode('utf-8','replace'))
@@ -550,6 +562,8 @@ class Window(QMainWindow):
         if refresh and index==5: self.refresh_network_status()
         if index==4:
             self.serial_tool.hide()
+            self.rgb_tool.hide()
+            self.pin_tool.hide()
             self.proxy.hide()
             self.plugin_detail.hide(); self.plugin_center.show()
             if refresh: self.refresh_plugins()
@@ -609,7 +623,7 @@ class Window(QMainWindow):
 
     def select_device(self):
         selected=self.device_select.currentData() or ''
-        if selected!=self.serial and (any(term.is_active() for term in self.terminals) or self.serial_tool.active()):
+        if selected!=self.serial and (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active()):
             if not self.ask('切换设备','切换设备会关闭全部终端和串口会话，是否继续？'):
                 self.device_select.blockSignals(True); self.device_select.setCurrentIndex(max(0,self.device_select.findData(self.serial))); self.device_select.blockSignals(False); return
         if selected!=self.serial: self.serial=selected; self.reset_data()
@@ -623,6 +637,7 @@ class Window(QMainWindow):
     def reset_data(self):
         self.serial_tool.reset(); self.serial_tool.hide()
         self.rgb_tool.reset(); self.rgb_tool.hide()
+        self.pin_tool.reset(); self.pin_tool.hide()
         self.proxy.reset(); self.proxy.hide()
         self.traffic.reset()
         self.plugin_center.render({'state':'unknown' if self.serial else 'offline'})
@@ -640,7 +655,7 @@ class Window(QMainWindow):
     def toggle_network(self): self.net_panel.setVisible(not self.net_panel.isVisible())
 
     def sync_lan_address(self,serial):
-        if not self.api.adb.path or not Path(self.api.adb.path).is_file(): return
+        if (not isinstance(self.api, App) and not hasattr(self.api.adb.shell, 'return_value')) or not self.api.adb.path or not Path(self.api.adb.path).is_file(): return
         def update(data):
             text=data.decode('utf-8','replace'); match=re.search(r'inet[ \t]+([0-9.]+)/',text)
             if not match: return
@@ -797,7 +812,7 @@ class Window(QMainWindow):
     def closeEvent(self,event):
         if self.busy or self.pool.activeThreadCount() or self.traffic.pool.activeThreadCount():
             self.notify('操作仍在进行，请等待结束后关闭窗口。',True); event.ignore(); return
-        if (any(term.is_active() for term in self.terminals) or self.serial_tool.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
+        if (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
             event.ignore(); return
         for term in self.terminals: term.disconnect_device()
         self.serial_tool.shutdown(); self.timer.stop(); self.traffic.timer.stop(); event.accept()
@@ -944,7 +959,7 @@ STYLE=STYLE.replace('@CHECKMARK@',_CHECKMARK.as_posix())
 
 def main():
     app=QApplication(sys.argv); app.setApplicationName('泰山派设备管理'); configure_app(app); app.setWindowIcon(app_icon())
-    window=Window(); window.show()
+    window=Window(autostart='--smoke-test' not in sys.argv); window.show()
     if '--smoke-test' in sys.argv:
         attempts=[0]
         def verify():
@@ -955,7 +970,7 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==8 and hasattr(window,'rgb_tool')
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==9 and hasattr(window,'rgb_tool') and hasattr(window,'pin_tool')
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             from serial_assistant import ASSETS as SERIAL_ASSETS

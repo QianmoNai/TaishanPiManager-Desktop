@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 from adb_core import UserError
 from pin_assistant import gpio, i2c_scan, inventory, pwm
-from pin_widget import PINOUT_IMAGE, HEADER_GPIO_PINS, _linux_gpio
+from pin_widget import PINOUT_IMAGE, HEADER_GPIO_PINS, HEADER_I2C_BUSES, HEADER_SPI, HEADER_PWM, _linux_gpio
 
 
 class PinAssistantTests(unittest.TestCase):
@@ -18,6 +18,11 @@ class PinAssistantTests(unittest.TestCase):
         self.assertEqual(mapping[37], 15)
         self.assertNotIn(1, mapping)
         self.assertNotIn(6, mapping)
+
+    def test_header_bus_mappings_match_pinout(self):
+        self.assertEqual(dict(HEADER_I2C_BUSES)['i2c-2'] if False else HEADER_I2C_BUSES[0][1], 'i2c-2')
+        self.assertIn('排针 19/21/23/24', HEADER_SPI)
+        self.assertEqual(HEADER_PWM[0][1], 'pwmchip2')
 
     def test_gpio_rejects_invalid_number_and_action(self):
         with self.assertRaises(UserError): gpio(Mock(), 'board', -1)

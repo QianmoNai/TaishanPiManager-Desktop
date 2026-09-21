@@ -16,6 +16,17 @@ def _linux_gpio(name):
 
 
 # GPIO-capable physical pins from the TaishanPi 40-pin header drawing.
+HEADER_I2C_BUSES = (
+    ("排针 3/5 · I2C2_M0 · SDA GPIO0_B6 / SCL GPIO0_B5", "i2c-2"),
+    ("排针 27/28 · I2C3_M1 · SDA GPIO3_B6 / SCL GPIO3_B5", "i2c-3"),
+)
+HEADER_SPI = "排针 19/21/23/24 · SPI3_M1 · MOSI GPIO4_C3 / MISO GPIO4_C5 / CLK GPIO4_C2 / CS0 GPIO4_C6"
+HEADER_PWM = (
+    ("排针 12 · PWM14_M0 · GPIO3_C4 · pwmchip2", "pwmchip2"),
+    ("排针 32 · PWM15_IR_M0 · GPIO3_C5 · 未发现对应控制器", "pwmchip2"),
+    ("排针 33/35 · PWM8_M0 · GPIO3_B1/B2 · pwmchip0", "pwmchip0"),
+)
+
 HEADER_GPIO_PINS = (
     (7, "GPIO1_A4", "GPIO"), (8, "GPIO3_B7", "UART3_TX_M1"), (10, "GPIO3_C0", "UART3_RX_M1"),
     (11, "GPIO3_A1", "GPIO"), (12, "GPIO3_C4", "PWM14_M0"), (13, "GPIO3_A2", "GPIO"),
@@ -54,13 +65,17 @@ class PinPanel(QWidget):
         grid.addWidget(label('排针脚位', 'caption'), 0, 0); grid.addWidget(self.gpio_number, 0, 1); grid.addWidget(label('操作', 'caption'), 0, 2); grid.addWidget(self.gpio_action, 0, 3); grid.addWidget(label('电平', 'caption'), 0, 4); grid.addWidget(self.gpio_value, 0, 5); grid.addWidget(self.gpio_btn, 0, 6); box.addLayout(grid); box.addWidget(self.gpio_result); root.addWidget(frame)
 
         frame, box = card(); box.addWidget(label('I2C', 'section')); box.addWidget(label('扫描当前设备上已发现的 I2C 总线，仅执行地址探测，不写入寄存器。', 'subtle', True))
-        row = QHBoxLayout(); self.i2c_bus = QComboBox(); self.i2c_bus.addItem('i2c-0', 'i2c-0'); self.i2c_scan_btn = button('扫描地址', self.scan_i2c, 'primary'); row.addWidget(self.i2c_bus, 1); row.addWidget(self.i2c_scan_btn); box.addLayout(row)
+        row = QHBoxLayout(); self.i2c_bus = QComboBox(); self.i2c_bus.setAccessibleName('排针 I2C 总线')
+        for title, bus in HEADER_I2C_BUSES: self.i2c_bus.addItem(title, bus)
+        self.i2c_scan_btn = button('扫描地址', self.scan_i2c, 'primary'); row.addWidget(self.i2c_bus, 1); row.addWidget(self.i2c_scan_btn); box.addLayout(row)
         self.i2c_output = self.console('扫描结果会显示在这里。'); self.i2c_output.setMinimumHeight(120); box.addWidget(self.i2c_output); root.addWidget(frame)
 
         frame, box = card(); box.addWidget(label('SPI / PWM', 'section')); box.addWidget(label('SPI 先提供设备节点查看；PWM 支持读取状态和设置周期、占空比、使能。', 'subtle', True))
-        self.spi_output = label('SPI 设备：尚未读取', 'caption', True); box.addWidget(self.spi_output)
+        self.spi_output = label('SPI 排针：' + HEADER_SPI + ' · 尚未读取设备节点', 'caption', True); box.addWidget(self.spi_output)
         grid = QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(9)
-        self.pwm_chip = QComboBox(); self.pwm_chip.addItem('pwmchip0', 'pwmchip0'); self.pwm_channel = QSpinBox(); self.pwm_channel.setRange(0, 31); self.pwm_period = QSpinBox(); self.pwm_period.setRange(1, 1_000_000_000); self.pwm_period.setValue(20_000_000); self.pwm_period.setSuffix(' ns'); self.pwm_duty = QSpinBox(); self.pwm_duty.setRange(0, 20_000_000); self.pwm_duty.setValue(10_000_000); self.pwm_duty.setSuffix(' ns'); self.pwm_enable = QCheckBox('启用'); self.pwm_btn = button('读取 PWM', self.read_pwm, 'secondary'); self.pwm_apply_btn = button('应用 PWM', self.apply_pwm, 'primary'); self.pwm_result = label('尚未读取 PWM 状态。', 'caption', True)
+        self.pwm_chip = QComboBox(); self.pwm_chip.setAccessibleName('排针 PWM');
+        for title, chip in HEADER_PWM: self.pwm_chip.addItem(title, chip)
+        self.pwm_channel = QSpinBox(); self.pwm_channel.setRange(0, 31); self.pwm_period = QSpinBox(); self.pwm_period.setRange(1, 1_000_000_000); self.pwm_period.setValue(20_000_000); self.pwm_period.setSuffix(' ns'); self.pwm_duty = QSpinBox(); self.pwm_duty.setRange(0, 20_000_000); self.pwm_duty.setValue(10_000_000); self.pwm_duty.setSuffix(' ns'); self.pwm_enable = QCheckBox('启用'); self.pwm_btn = button('读取 PWM', self.read_pwm, 'secondary'); self.pwm_apply_btn = button('应用 PWM', self.apply_pwm, 'primary'); self.pwm_result = label('尚未读取 PWM 状态。', 'caption', True)
         for widget in (self.pwm_chip, self.pwm_channel, self.pwm_period, self.pwm_duty, self.pwm_enable, self.pwm_btn, self.pwm_apply_btn): self._controls.append(widget)
         grid.addWidget(label('芯片', 'caption'), 0, 0); grid.addWidget(self.pwm_chip, 0, 1); grid.addWidget(label('通道', 'caption'), 0, 2); grid.addWidget(self.pwm_channel, 0, 3); grid.addWidget(label('周期', 'caption'), 1, 0); grid.addWidget(self.pwm_period, 1, 1); grid.addWidget(label('占空比', 'caption'), 1, 2); grid.addWidget(self.pwm_duty, 1, 3); grid.addWidget(self.pwm_enable, 1, 4); grid.addWidget(self.pwm_btn, 0, 5); grid.addWidget(self.pwm_apply_btn, 1, 5); box.addLayout(grid); box.addWidget(self.pwm_result); root.addWidget(frame)
 
@@ -104,15 +119,22 @@ class PinPanel(QWidget):
     def render(self, data, generation=None):
         if generation is not None and generation != self.generation: return
         self.model.setText(data.get('model', '未知设备'))
-        buses = data.get('i2cdev') or data.get('i2c') or ['i2c-0']
+        available_i2c = set(data.get('i2cdev') or data.get('i2c') or [])
+        buses = [bus for _, bus in HEADER_I2C_BUSES if not available_i2c or bus in available_i2c]
         self.i2c_bus.blockSignals(True); self.i2c_bus.clear()
-        for bus in buses: self.i2c_bus.addItem(bus, bus)
+        for title, bus in HEADER_I2C_BUSES:
+            if bus in buses: self.i2c_bus.addItem(title, bus)
+        if not buses: self.i2c_bus.addItem('图片中的 I2C 总线未在设备上发现', '')
         self.i2c_bus.blockSignals(False)
-        chips = data.get('pwm') or ['pwmchip0']; self.pwm_chip.blockSignals(True); self.pwm_chip.clear()
-        for chip in chips: self.pwm_chip.addItem(chip, chip)
+        available_pwm = set(data.get('pwm') or [])
+        self.pwm_chip.blockSignals(True); self.pwm_chip.clear()
+        for title, chip in HEADER_PWM:
+            self.pwm_chip.addItem(title, chip)
+            item = self.pwm_chip.model().item(self.pwm_chip.count() - 1)
+            if '未发现' in title or (available_pwm and chip not in available_pwm): item.setEnabled(False)
         self.pwm_chip.blockSignals(False)
         spi = data.get('spi') or []
-        self.spi_output.setText('SPI 设备：' + ('、'.join(spi) if spi else '未发现 /dev/spidev*'))
+        self.spi_output.setText('SPI 排针：' + HEADER_SPI + ' · 设备：' + ('、'.join(spi) if spi else '未发现 /dev/spidev*'))
         self.state.setText(f'已读取 · GPIO 芯片 {len(data.get("gpiochips", []))} · I2C {len(buses)} · SPI {len(spi)} · PWM {len(chips)}')
 
     def run_gpio(self):
@@ -145,4 +167,4 @@ class PinPanel(QWidget):
         self.pwm_result.setText(f'{data.get("chip")} 通道 {data.get("channel")} · 周期 {data.get("period")} ns · 占空比 {data.get("duty")} ns · '+('启用' if str(data.get('enable')) == '1' else '停用'))
 
     def reset(self):
-        self.generation += 1; self.state.setText('未读取硬件资源'); self.model.setText('连接泰山派后读取 GPIO、I2C、SPI、PWM 节点。'); self.gpio_result.setText('尚未读取 GPIO 状态。'); self.i2c_output.clear(); self.spi_output.setText('SPI 设备：尚未读取'); self.pwm_result.setText('尚未读取 PWM 状态。')
+        self.generation += 1; self.state.setText('未读取硬件资源'); self.model.setText('连接泰山派后读取 GPIO、I2C、SPI、PWM 节点。'); self.gpio_result.setText('尚未读取 GPIO 状态。'); self.i2c_output.clear(); self.spi_output.setText('SPI 排针：' + HEADER_SPI + ' · 尚未读取设备节点'); self.pwm_result.setText('尚未读取 PWM 状态。')

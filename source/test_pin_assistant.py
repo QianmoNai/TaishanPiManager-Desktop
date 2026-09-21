@@ -3,13 +3,21 @@ from unittest.mock import Mock
 
 from adb_core import UserError
 from pin_assistant import gpio, i2c_scan, inventory, pwm
-from pin_widget import PINOUT_IMAGE
+from pin_widget import PINOUT_IMAGE, HEADER_GPIO_PINS, _linux_gpio
 
 
 class PinAssistantTests(unittest.TestCase):
     def test_pinout_image_is_bundled_source_asset(self):
         self.assertTrue(PINOUT_IMAGE.is_file())
         self.assertGreater(PINOUT_IMAGE.stat().st_size, 10000)
+
+    def test_header_gpio_mapping_uses_physical_pins(self):
+        mapping = {physical: _linux_gpio(name) for physical, name, _ in HEADER_GPIO_PINS}
+        self.assertEqual(mapping[8], 111)
+        self.assertEqual(mapping[10], 112)
+        self.assertEqual(mapping[37], 15)
+        self.assertNotIn(1, mapping)
+        self.assertNotIn(6, mapping)
 
     def test_gpio_rejects_invalid_number_and_action(self):
         with self.assertRaises(UserError): gpio(Mock(), 'board', -1)

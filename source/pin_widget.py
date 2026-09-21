@@ -9,6 +9,26 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QC
 PINOUT_IMAGE = (Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent) / "pinout-taishanpi.png"
 
 
+def _linux_gpio(name):
+    bank, bit = name.split("_", 1)
+    controller = int(bank[4:]); offset = (ord(bit[0]) - ord("A")) * 8 + int(bit[1:])
+    return controller * 32 + offset
+
+
+# GPIO-capable physical pins from the TaishanPi 40-pin header drawing.
+HEADER_GPIO_PINS = (
+    (7, "GPIO1_A4", "GPIO"), (8, "GPIO3_B7", "UART3_TX_M1"), (10, "GPIO3_C0", "UART3_RX_M1"),
+    (11, "GPIO3_A1", "GPIO"), (12, "GPIO3_C4", "PWM14_M0"), (13, "GPIO3_A2", "GPIO"),
+    (15, "GPIO3_A3", "GPIO"), (16, "GPIO3_A4", "GPIO"), (18, "GPIO3_A5", "GPIO"),
+    (19, "GPIO4_C3", "SPI3_MOSI_M1"), (21, "GPIO4_C5", "SPI3_MISO_M1"), (22, "GPIO3_A6", "GPIO"),
+    (23, "GPIO4_C2", "SPI3_CLK_M1"), (24, "GPIO4_C6", "SPI3_CS0_M1"), (26, "GPIO3_A7", "GPIO"),
+    (27, "GPIO3_B6", "I2C3_SDA_M1"), (28, "GPIO3_B5", "I2C3_SCL_M1"), (29, "GPIO3_B0", "GPIO"),
+    (31, "GPIO3_C2", "GPIO"), (32, "GPIO3_C5", "PWM15_IR_M0"), (33, "GPIO3_B1", "PWM8_M0"),
+    (35, "GPIO3_B2", "PWM8_M0"), (37, "GPIO0_B7", "GPIO"), (38, "GPIO3_B3", "GPIO"),
+    (40, "GPIO3_B4", "GPIO"),
+)
+
+
 class PinPanel(QWidget):
     def __init__(self, owner, label, button, card):
         super().__init__(); self.owner = owner; self.generation = 0; self._controls = []
@@ -22,13 +42,16 @@ class PinPanel(QWidget):
         self.model = label('连接泰山派后读取 GPIO、I2C、SPI、PWM 节点。', 'subtle', True); box.addWidget(self.model)
         box.addWidget(label('输出和配置操作只作用于当前会话；请确认 3.3V 电平、外部供电和引脚复用，避免与 UART、调试口或其他外设冲突。', 'caption', True)); root.addWidget(frame)
 
-        frame, box = card(); box.addWidget(label('GPIO', 'section')); box.addWidget(label('通过 Linux GPIO sysfs 读取或设置电平。改变方向和输出值前会再次确认。', 'subtle', True))
+        frame, box = card(); box.addWidget(label('GPIO', 'section')); box.addWidget(label('按 40 针排针物理脚位选择 GPIO，界面会显示 GPIO 名称和 Linux 编号。改变方向和输出值前会再次确认。', 'subtle', True))
         grid = QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(9)
-        self.gpio_number = QSpinBox(); self.gpio_number.setRange(0, 511); self.gpio_number.setValue(0); self.gpio_number.setPrefix('GPIO ')
+        self.gpio_number = QComboBox(); self.gpio_number.setAccessibleName('排针 GPIO'); self.gpio_number.setMinimumWidth(235)
+        for physical, name, function in HEADER_GPIO_PINS:
+            number = _linux_gpio(name); suffix = '' if function == 'GPIO' else f' · {function}'
+            self.gpio_number.addItem(f'排针 {physical} · {name} · Linux {number}{suffix}', number)
         self.gpio_action = QComboBox(); self.gpio_action.addItem('读取', 'read'); self.gpio_action.addItem('设为输入', 'input'); self.gpio_action.addItem('设为输出', 'output'); self.gpio_action.addItem('写入电平', 'write')
         self.gpio_value = QComboBox(); self.gpio_value.addItem('低电平 0', 0); self.gpio_value.addItem('高电平 1', 1)
         self.gpio_btn = button('执行 GPIO 操作', self.run_gpio, 'primary'); self.gpio_result = label('尚未读取 GPIO 状态。', 'caption', True)
-        grid.addWidget(label('编号', 'caption'), 0, 0); grid.addWidget(self.gpio_number, 0, 1); grid.addWidget(label('操作', 'caption'), 0, 2); grid.addWidget(self.gpio_action, 0, 3); grid.addWidget(label('电平', 'caption'), 0, 4); grid.addWidget(self.gpio_value, 0, 5); grid.addWidget(self.gpio_btn, 0, 6); box.addLayout(grid); box.addWidget(self.gpio_result); root.addWidget(frame)
+        grid.addWidget(label('排针脚位', 'caption'), 0, 0); grid.addWidget(self.gpio_number, 0, 1); grid.addWidget(label('操作', 'caption'), 0, 2); grid.addWidget(self.gpio_action, 0, 3); grid.addWidget(label('电平', 'caption'), 0, 4); grid.addWidget(self.gpio_value, 0, 5); grid.addWidget(self.gpio_btn, 0, 6); box.addLayout(grid); box.addWidget(self.gpio_result); root.addWidget(frame)
 
         frame, box = card(); box.addWidget(label('I2C', 'section')); box.addWidget(label('扫描当前设备上已发现的 I2C 总线，仅执行地址探测，不写入寄存器。', 'subtle', True))
         row = QHBoxLayout(); self.i2c_bus = QComboBox(); self.i2c_bus.addItem('i2c-0', 'i2c-0'); self.i2c_scan_btn = button('扫描地址', self.scan_i2c, 'primary'); row.addWidget(self.i2c_bus, 1); row.addWidget(self.i2c_scan_btn); box.addLayout(row)
@@ -94,12 +117,12 @@ class PinPanel(QWidget):
 
     def run_gpio(self):
         if not self.owner.require_device() or self.owner.busy: return
-        action = self.gpio_action.currentData(); number = self.gpio_number.value(); value = self.gpio_value.currentData()
-        if action in {'input', 'output', 'write'} and not self.owner.ask('确认 GPIO 操作', f'将操作 GPIO {number}，可能改变引脚方向或电平。请确认没有连接冲突，且外部电路使用 3.3V 电平。'): return
+        action = self.gpio_action.currentData(); number = self.gpio_number.currentData(); value = self.gpio_value.currentData()
+        if action in {'input', 'output', 'write'} and not self.owner.ask('确认 GPIO 操作', f'将操作 {self.gpio_number.currentText()}，可能改变引脚方向或电平。请确认没有连接冲突，且外部电路使用 3.3V 电平。'): return
         self.owner.work(lambda: self.owner.call('pin-gpio', {'number': number, 'action': action, 'value': value}), self.render_gpio, '正在执行 GPIO 操作…')
 
     def render_gpio(self, data):
-        self.gpio_result.setText(f'GPIO {data["number"]} · 方向：{data.get("direction", "未知")} · 电平：{data.get("value", "未知")}')
+        self.gpio_result.setText(f'{self.gpio_number.currentText()} · 方向：{data.get("direction", "未知")} · 电平：{data.get("value", "未知")}')
 
     def scan_i2c(self):
         if not self.owner.require_device() or self.owner.busy: return

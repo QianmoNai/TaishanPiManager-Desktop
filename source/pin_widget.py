@@ -135,7 +135,7 @@ class PinPanel(QWidget):
         self.pwm_chip.blockSignals(False)
         spi = data.get('spi') or []
         self.spi_output.setText('SPI 排针：' + HEADER_SPI + ' · 设备：' + ('、'.join(spi) if spi else '未发现 /dev/spidev*'))
-        self.state.setText(f'已读取 · GPIO 芯片 {len(data.get("gpiochips", []))} · I2C {len(buses)} · SPI {len(spi)} · PWM {len(chips)}')
+        self.state.setText(f'已读取 · GPIO 芯片 {len(data.get("gpiochips", []))} · I2C {len(buses)} · SPI {len(spi)} · PWM {len(available_pwm)}')
 
     def run_gpio(self):
         if not self.owner.require_device() or self.owner.busy: return

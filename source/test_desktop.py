@@ -58,6 +58,14 @@ class DesktopTests(unittest.TestCase):
         with patch.object(Terminal,'connect_device'):
             self.window.render_devices([{'serial':'usb-test','state':'device','transport':'USB'}]); QTest.qWait(30); self.wait_idle()
 
+    def test_pin_inventory_renders_with_and_without_pwm(self):
+        panel=self.window.pin_tool
+        panel.render({'model':'Test board','gpiochips':['gpiochip0'], 'i2cdev':['i2c-2'], 'spi':['spidev3.0'], 'pwm':['pwmchip2','pwmchip3']})
+        self.assertIn('PWM 2',panel.state.text())
+        self.assertIn('GPIO 芯片 1',panel.state.text())
+        panel.render({})
+        self.assertIn('PWM 0',panel.state.text())
+
     def test_empty_device_and_all_pages(self):
         self.window.render_devices([])
         self.assertEqual(self.window.serial,'')

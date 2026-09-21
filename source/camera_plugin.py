@@ -1,5 +1,8 @@
 """V4L2 discovery and bounded JPEG streaming over ADB."""
-import re, shlex
+import re, shlex, hashlib, secrets, sys
+from pathlib import Path
+ASSETS=(Path(sys._MEIPASS) if getattr(sys,"frozen",False) else Path(__file__).resolve().parent.parent)/"plugins/camera-assistant"
+TARGET="/userdata/bin/tspi-camera-stream.sh"
 from adb_core import UserError
 
 def inventory(adb,serial):
@@ -29,7 +32,7 @@ def stream_command(device,width,height,fps,mode):
  else: source=f'v4l2src device={device} ! video/x-raw,{caps} ! videoconvert ! jpegenc quality=75'
  pipeline='gst-launch-1.0 -q '+source+' ! queue max-size-buffers=2 leaky=downstream ! fdsink fd=1 sync=false'
  # stdin heartbeats bound remote lifetime even when ADB disappears.
- return "sh -c "+shlex.quote("""child=; trap '[ -z "$child" ] || kill "$child" 2>/dev/null; wait "$child" 2>/dev/null' EXIT; trap 'exit 0' HUP INT TERM; """+pipeline+""" </dev/null & child=$!; while kill -0 "$child" 2>/dev/null; do read -r -t 6 heartbeat || break; [ "$heartbeat" != stop ] || break; done""")
+ return "sh "+TARGET+" "+shlex.quote("exec "+pipeline)
 
 class JpegFrames:
  def __init__(self): self.buffer=bytearray()
@@ -46,3 +49,38 @@ class JpegFrames:
   return newest
 
 def capture(*args): raise UserError('请开始预览后点击保存照片。')
+
+
+def status(adb,serial):
+ out,_,_=adb.shell(serial,f'if [ -f {TARGET} ]; then sha256sum {TARGET}; else echo missing; fi')
+ value=out.decode().strip().split()[0]
+ digest=hashlib.sha256((ASSETS/'camera-stream.sh').read_bytes()).hexdigest()
+ return {'state':'missing' if value=='missing' else 'installed' if value==digest else 'update'}
+
+def install(adb,serial):
+ source=ASSETS/'camera-stream.sh'; temp='/tmp/tspi-camera-'+secrets.token_hex(12)+'.sh'
+ try:
+  adb.run(['-s',serial,'push',str(source),temp])
+  digest=hashlib.sha256(source.read_bytes()).hexdigest()
+  adb.shell(serial,f'''set -e
+command -v gst-launch-1.0 >/dev/null
+command -v v4l2-ctl >/dev/null
+test "$(sha256sum {temp} | cut -d ' ' -f 1)" = {digest}
+sh -n {temp}
+mkdir -p /userdata/bin
+if [ -f {TARGET} ]; then cp -p {TARGET} {TARGET}.bak; fi
+cp {temp} {TARGET}.new
+chmod 700 {TARGET}.new
+mv {TARGET}.new {TARGET}
+sync
+''',timeout=25)
+ finally: adb.shell(serial,'rm -f '+temp,check=False)
+ return status(adb,serial)
+
+def uninstall(adb,serial):
+ adb.shell(serial,f'rm -f {TARGET} {TARGET}.bak {TARGET}.new')
+ return {'state':'missing'}
+
+def prepare(adb,serial,device,width,height,fps,mode):
+ if status(adb,serial)['state']!='installed': raise UserError('请先安装或升级摄像头助手插件。')
+ return stream_command(device,width,height,fps,mode)

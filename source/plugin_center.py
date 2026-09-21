@@ -6,14 +6,14 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QL
 class PluginCenter(QWidget):
     def __init__(self, owner, label, button, card, icon):
         super().__init__(); self.owner=owner; self.state='unknown'; self.cards=[]
-        self.category='全部'; self.detail_callback=None; self.proxy_state='unknown'; self.ld06_state='unknown'
+        self.category='全部'; self.detail_callback=None; self.proxy_state='unknown'; self.ld06_state='unknown'; self.camera_state='unknown'
         layout=QVBoxLayout(self); layout.setContentsMargins(0,0,0,0); layout.setSpacing(18)
         hero,box=card(); hero.setObjectName('hero'); box.setContentsMargins(26,23,26,23)
         row=QHBoxLayout(); intro=QVBoxLayout(); intro.addWidget(label('TAISHANPI  /  PLUGINS','eyebrow'))
         intro.addWidget(label('为你的泰山派，添加更多可能。','heroTitle',True))
         intro.addWidget(label('发现工具，管理插件，让常用功能各就其位。','heroSub',True)); row.addLayout(intro,1)
         art=label(); art.setPixmap(icon('settings','#007aff',58).pixmap(58,58)); row.addWidget(art); box.addLayout(row)
-        self.summary=label('3 款可安装插件 · 8 项内置工具','heroCaption'); box.addWidget(self.summary); layout.addWidget(hero)
+        self.summary=label('4 款可安装插件 · 7 项内置工具','heroCaption'); box.addWidget(self.summary); layout.addWidget(hero)
         row=QHBoxLayout(); self.search=QLineEdit(); self.search.setPlaceholderText('搜索插件或工具'); self.search.setClearButtonEnabled(True)
         self.search.setAccessibleName('搜索插件'); self.search.textChanged.connect(self.filter_cards); row.addWidget(self.search,1)
         self.refresh=button('刷新插件状态',owner.refresh_plugins,symbol='refresh'); row.addWidget(self.refresh); layout.addLayout(row)
@@ -25,13 +25,13 @@ class PluginCenter(QWidget):
         self.hint=label('连接设备后可查看插件安装与运行状态。','subtle',True); layout.addWidget(self.hint)
         self.grid=QGridLayout(); self.grid.setSpacing(14); self.grid.setColumnStretch(0,1); self.grid.setColumnStretch(1,1); layout.addLayout(self.grid)
         items=[
-            ('traffic','网络流量','实时速度、双向测速与累计流量，清晰掌握每一次收发。','网络','wifi','#007aff','v2.0 · 随软件提供',None),
-            ('proxy','网络代理','Mihomo 核心安装、配置导入、规则分流与策略组切换。','网络','usb','#8b5cf6','Mihomo 1.19.31 · ARM64',None),
-            ('camera','摄像头助手（内测版）','实时预览、测试画面与 JPEG 照片保存。','系统','settings','#38a169','v0.2 · 内测版',None),
-            ('ld06','LD06 雷达视图','可选安装，UART3 雷达实时扫描、距离显示与点云导出。','系统','settings','#30b89a','v1.0 · 可选安装',None),
-            ('serial','串口助手','UART3 排针串口参数、文本/HEX 收发、VOFA 协议波形与引脚配置。','系统','usb','#e5a13d','内置工具 · ADB 串口会话',None),
-            ('rgb','RGB 灯控制','控制板载 RGB 灯亮灭、预设颜色与独立红绿蓝通道。','系统','settings','#e35d6a','内置工具 · ADB LED 控制',None),
-            ('pin','引脚助手','GPIO、I2C、SPI、PWM 引脚资源查看与硬件调试。','系统','settings','#2d9cdb','内置工具 · ADB 硬件会话',None),
+            ('traffic','网络流量','实时速度、双向测速与累计流量，清晰掌握每一次收发。','网络','traffic','#007aff','v2.0 · 随软件提供',None),
+            ('proxy','网络代理','Mihomo 核心安装、配置导入、规则分流与策略组切换。','网络','proxy','#8b5cf6','Mihomo 1.19.31 · ARM64',None),
+            ('camera','摄像头助手（内测版）','实时预览、测试画面与 JPEG 照片保存。','系统','camera','#38a169','v0.3 · 可选安装',None),
+            ('ld06','LD06 雷达视图','可选安装，UART3 雷达实时扫描、距离显示与点云导出。','系统','radar','#30b89a','v1.0 · 可选安装',None),
+            ('serial','串口助手','UART3 排针串口参数、文本/HEX 收发、VOFA 协议波形与引脚配置。','系统','serial','#e5a13d','内置工具 · ADB 串口会话',None),
+            ('rgb','RGB 灯控制','控制板载 RGB 灯亮灭、预设颜色与独立红绿蓝通道。','系统','rgb','#e35d6a','内置工具 · ADB LED 控制',None),
+            ('pin','引脚助手','GPIO、I2C、SPI、PWM 引脚资源查看与硬件调试。','系统','pin','#2d9cdb','内置工具 · ADB 硬件会话',None),
             ('wifi','网络设置','管理 Wi-Fi、USB 网卡与网络路由。','网络','wifi','#30b86b','内置工具 · 无需安装',5),
             ('terminal','交互终端','持续 Shell 会话，彩色输出、补全与快捷操作。','系统','terminal','#8b5cf6','内置工具 · 无需安装',3),
             ('files','文件管理','浏览设备目录，在电脑与泰山派之间传输文件。','系统','folder','#ee9a24','内置工具 · 无需安装',1),
@@ -41,17 +41,18 @@ class PluginCenter(QWidget):
             frame,box=card(); box.setSpacing(10); frame.setMinimumHeight(205)
             row=QHBoxLayout(); tile=label(); tile.setPixmap(icon(symbol,color,34).pixmap(34,34)); row.addWidget(tile)
             titles=QVBoxLayout(); titles.setSpacing(3); titles.addWidget(label(title,'section')); titles.addWidget(label(meta,'caption')); row.addLayout(titles,1)
-            badge=label('待检测' if key in ('traffic','proxy','ld06') else '内置','badge'); row.addWidget(badge); box.addLayout(row)
+            badge=label('待检测' if key in ('traffic','proxy','ld06','camera') else '内置','badge'); row.addWidget(badge); box.addLayout(row)
             box.addWidget(label(description,'subtle',True)); box.addStretch()
-            row=QHBoxLayout(); row.addWidget(label(category+' · '+('板端插件' if key in ('traffic','proxy','ld06') else '桌面工具'),'caption')); row.addStretch()
-            open_btn=button('查看详情' if key in ('traffic','proxy','ld06') else '打开',lambda checked=False,p=page,k=key:owner.open_radar() if k=='ld06' else owner.open_camera() if k=='camera' else owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_pin() if k=='pin' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy','ld06') else 'secondary')
+            row=QHBoxLayout(); row.addWidget(label(category+' · '+('板端插件' if key in ('traffic','proxy','ld06','camera') else '桌面工具'),'caption')); row.addStretch()
+            open_btn=button('查看详情' if key in ('traffic','proxy','ld06','camera') else '打开',lambda checked=False,p=page,k=key:owner.open_radar() if k=='ld06' else owner.open_camera() if k=='camera' else owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_pin() if k=='pin' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy','ld06','camera') else 'secondary')
             row.addWidget(open_btn); box.addLayout(row)
             if key=='traffic': self.traffic_badge=badge; self.traffic_open=open_btn
             if key=='proxy': self.proxy_badge=badge
+            if key=='camera': self.camera_badge=badge
             if key=='ld06': self.ld06_badge=badge
             self.cards.append({'key':key,'name':title,'description':description,'category':category,'widget':frame})
         self.empty=label('没有找到匹配的插件。试试其他关键词或分类。','subtle',True); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setMinimumHeight(100); layout.addWidget(self.empty)
-        footer=label('本地插件目录 · 当前提供 3 款可安装插件，其余为内置工具快捷入口。','caption',True); layout.addWidget(footer)
+        footer=label('本地插件目录 · 当前提供 4 款可安装插件，其余为内置工具快捷入口。','caption',True); layout.addWidget(footer)
         frame,box=card(); row=QHBoxLayout(); row.addWidget(label('设备维护','section')); row.addStretch()
         owner.reboot_btn=button('重启设备',owner.reboot,'danger','power'); row.addWidget(owner.reboot_btn); box.addLayout(row)
         box.addWidget(label('重启会中断服务与 ADB 连接。固件烧录请使用瑞芯微烧录工具。','caption',True)); layout.addWidget(frame)
@@ -68,6 +69,7 @@ class PluginCenter(QWidget):
         query=self.search.text().strip().casefold(); visible=0
         for entry in self.cards:
             installed=entry['key']!='traffic' or self.state in ('running','stopped','update','stale')
+            if entry['key']=='camera': installed=self.camera_state in ('installed','update')
             if entry['key']=='ld06': installed=self.ld06_state in ('installed','update')
             if entry['key']=='proxy': installed=self.proxy_state in ('running','stopped')
             matches=(not query or query in (entry['name']+' '+entry['description']+' '+entry['key']).casefold())
@@ -82,7 +84,14 @@ class PluginCenter(QWidget):
         self.ld06_badge.setText({'installed':'已安装','missing':'未安装','update':'可升级','offline':'未连接'}.get(self.ld06_state,'待检测'))
         self.filter_cards()
 
+    def render_camera(self,data):
+        self.camera_state=data.get('state','unknown')
+        self.camera_badge.setText({'installed':'已安装','missing':'未安装','update':'可升级','offline':'未连接'}.get(self.camera_state,'待检测'))
+        self.filter_cards()
+
     def render(self,data):
+        if 'camera' in data: self.render_camera(data['camera'])
+        elif data.get('state') in ('offline','unknown'): self.render_camera({'state':data['state']})
         if 'ld06' in data: self.render_ld06(data['ld06'])
         elif data.get('state') in ('offline','unknown'): self.render_ld06({'state':data['state']})
         if 'proxy' in data: self.render_proxy(data['proxy'])

@@ -4,16 +4,21 @@ from PySide6.QtCore import QTimer,QProcess,Qt
 from PySide6.QtGui import QImage,QPixmap
 from selection_widgets import QComboBox
 from camera_plugin import stream_command,JpegFrames
+import camera_plugin as plugin
 
 class CameraPanel(QWidget):
  def __init__(self,owner,label,button,card):
-  super().__init__(); self.owner=owner; self.devices=[]; self.epoch=0; self.image=QImage(); self.parser=JpegFrames(); self.frames=0
+  super().__init__(); self.owner=owner; self.preparing=False; self.devices=[]; self.epoch=0; self.image=QImage(); self.parser=JpegFrames(); self.frames=0
   self.process=QProcess(self); self.process.readyReadStandardOutput.connect(self.receive); self.process.readyReadStandardError.connect(self.errors); self.process.finished.connect(self.finished); self.process.errorOccurred.connect(lambda _:self.status.setText('无法启动预览，请检查 ADB。'))
   self.ping=QTimer(self); self.ping.setInterval(2000); self.ping.timeout.connect(lambda:self.process.write(b'ping\n'))
   self.timeout=QTimer(self); self.timeout.setSingleShot(True); self.timeout.setInterval(10000); self.timeout.timeout.connect(self.no_frames)
   self.kill=QTimer(self); self.kill.setSingleShot(True); self.kill.setInterval(2500); self.kill.timeout.connect(self.process.kill)
   self.paint=QTimer(self); self.paint.setInterval(66); self.paint.timeout.connect(self.show_frame); self.paint.start()
   lay=QVBoxLayout(self); lay.setContentsMargins(0,0,0,0); lay.addWidget(button('‹ 返回插件中心',owner.close_plugin)); f,b=card(); b.addWidget(label('摄像头助手（内测版）','section'))
+  self.install_status=label('尚未检测安装状态','caption');b.addWidget(self.install_status)
+  row=QHBoxLayout()
+  for title,action in [('安装 / 升级到泰山派','install'),('刷新安装状态','status'),('卸载','uninstall')]:row.addWidget(button(title,lambda checked=False,a=action:self.manage(a)))
+  b.addLayout(row)
   self.device=QComboBox(); row=QHBoxLayout(); row.addWidget(self.device,1); self.refresh_btn=button('刷新设备',self.refresh); row.addWidget(self.refresh_btn); b.addLayout(row)
   row=QHBoxLayout(); self.mode=QComboBox()
   for title,value in [('MJPEG 摄像头','mjpeg'),('原始视频转 JPEG','raw'),('测试画面（无需摄像头）','test')]: self.mode.addItem(title,value)
@@ -27,7 +32,15 @@ class CameraPanel(QWidget):
   self.status=label('请选择设备，或选择测试画面验证传输。','caption',True); b.addWidget(self.status)
   self.view=QLabel('等待画面'); self.view.setAlignment(Qt.AlignmentFlag.AlignCenter); self.view.setMinimumHeight(300); self.view.setMinimumWidth(0); b.addWidget(self.view)
   self.info=QPlainTextEdit(); self.info.setReadOnly(True); self.info.setMaximumHeight(150); b.addWidget(self.info); b.addWidget(label('通过 ADB 传输，无需开放网络端口。摄像头必须支持所选格式、分辨率和帧率；保存照片为电脑本地 JPEG。','caption',True)); lay.addWidget(f)
- def active(self): return self.process.state()!=QProcess.ProcessState.NotRunning
+ def active(self): return self.preparing or self.process.state()!=QProcess.ProcessState.NotRunning
+ def manage(self,action):
+  if self.active() or self.owner.busy or not self.owner.require_device():return
+  serial=self.owner.serial;epoch=self.epoch
+  def done(result):
+   if epoch!=self.epoch:return
+   self.install_status.setText({'installed':'已安装','missing':'未安装','update':'可升级'}.get(result['state'],'待检测'))
+   self.owner.plugin_center.render_camera(result)
+  self.owner.work(lambda:getattr(plugin,action)(self.owner.api.adb,serial),done,'正在处理摄像头插件…')
  def refresh(self):
   if self.active() or self.owner.busy or not self.owner.require_device():return
   epoch=self.epoch; serial=self.owner.serial
@@ -38,8 +51,17 @@ class CameraPanel(QWidget):
   if self.active() or self.owner.busy or not self.owner.require_device():return
   try: command=stream_command(self.device.currentText() or ('/dev/video0' if self.mode.currentData()=='test' else ''),*self.size.currentData(),self.fps.currentData(),self.mode.currentData())
   except Exception as exc: self.status.setText(str(exc));return
+  serial=self.owner.serial;epoch=self.epoch;self.preparing=True
+  def ready(command):
+   self.preparing=False
+   if epoch!=self.epoch or serial!=self.owner.serial:return
+   self.launch(command,serial)
+  def failed(_):self.preparing=False
+  args=(self.device.currentText() or '/dev/video0',*self.size.currentData(),self.fps.currentData(),self.mode.currentData())
+  self.owner.work(lambda:plugin.prepare(self.owner.api.adb,serial,*args),ready,'正在检查摄像头插件…');self.owner.job.signals.error.connect(failed)
+ def launch(self,command,serial):
   self.image=QImage(); self.parser=JpegFrames(); self.frames=0; self.view.clear(); self.status.setText('正在等待画面…')
-  self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(['-s',self.owner.serial,'exec-out',command]); self.process.start(); self.ping.start(); self.timeout.start()
+  self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(['-s',serial,'exec-out',command]); self.process.start(); self.ping.start(); self.timeout.start()
   for x in (self.device,self.mode,self.size,self.fps,self.refresh_btn,self.start_btn):x.setEnabled(False)
  def receive(self):
   raw=self.parser.feed(bytes(self.process.readAllStandardOutput()))
@@ -53,6 +75,7 @@ class CameraPanel(QWidget):
   if text:self.status.setText(text[-500:])
  def no_frames(self):self.stop();self.status.setText('未收到有效画面：请检查摄像头连接、占用及格式/分辨率/帧率。')
  def stop(self):
+  self.epoch+=1
   self.ping.stop();self.timeout.stop()
   if self.active():self.process.write(b'stop\n');self.process.closeWriteChannel();self.kill.start()
  def finished(self,*args):

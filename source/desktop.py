@@ -52,6 +52,9 @@ ICONS = {
 }
 
 
+ICONS.update({'traffic': '<path d="M7 3v18m-4-4 4 4 4-4M17 21V3m-4 4 4-4 4 4"/>', 'proxy': '<path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7Z"/><path d="M7 11h10m-3-3 3 3-3 3"/>', 'camera': '<path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/>', 'radar': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12 18 5"/><circle cx="7" cy="14" r="1"/>', 'serial': '<rect x="3" y="6" width="18" height="12" rx="4"/><path d="M7 10h1m3 0h1m3 0h1M8 14h1m3 0h1m3 0h1"/>', 'rgb': '<path d="M8 15a6 6 0 1 1 8 0v3H8Z M9 21h6"/><path d="m10 10 2 3 2-3"/>', 'pin': '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4M10 10h4v4h-4Z"/>'})
+
+
 def icon(name, color='#007AFF', size=24):
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="{color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">{ICONS[name]}</g></svg>'
     pix = QPixmap(size*2, size*2); pix.fill(Qt.GlobalColor.transparent)
@@ -209,7 +212,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.46','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.47','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -372,7 +375,7 @@ class Window(QMainWindow):
         layout.addStretch()
 
     def open_camera(self):
-        self.radar.hide(); self.serial_tool.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.camera.show(); self.title.setText('摄像头助手（内测版）'); self.subtitle.setText('摄像头检测与抓拍。'); self.camera.refresh()
+        self.radar.hide(); self.serial_tool.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.camera.show(); self.title.setText('摄像头助手（内测版）'); self.subtitle.setText('摄像头检测与抓拍。'); self.camera.manage('status')
 
     def open_radar(self):
         self.camera.hide()
@@ -451,7 +454,7 @@ class Window(QMainWindow):
         if self.busy: return
         self.plugin_center.render({'state':'unknown'})
         self.plugin_center.hint.setText('正在读取当前设备的插件状态…')
-        self.work(lambda:{**self.call('plugin-status'),'proxy':self.call('proxy-status'),'ld06':self.call('ld06-status')},self.plugin_center.render,'正在刷新插件状态…')
+        self.work(lambda:{**self.call('plugin-status'),'proxy':self.call('proxy-status'),'ld06':self.call('ld06-status'),'camera':self.call('camera-status')},self.plugin_center.render,'正在刷新插件状态…')
 
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False

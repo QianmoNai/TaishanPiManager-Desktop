@@ -10,4 +10,4 @@ class CameraTests(unittest.TestCase):
  def test_validation_and_cleanup(self):
   with self.assertRaises(UserError):stream_command('/dev/video0;reboot',640,480,15,'mjpeg')
   cmd=stream_command('/dev/video0',640,480,15,'mjpeg')
-  self.assertIn('image/jpeg',cmd);self.assertIn('read -r -t 6',cmd);self.assertIn('trap',cmd)
+  self.assertIn('image/jpeg',cmd);self.assertIn('/userdata/bin/tspi-camera-stream.sh',cmd)

@@ -1,6 +1,7 @@
 """Native Qt Widgets desktop application. No browser, webview or HTTP listener."""
 from __future__ import annotations
 from ld06_widget import RadarPanel
+from camera_widget import CameraPanel
 from serial_widget import SerialPanel
 from rgb_widget import RgbPanel
 from pin_widget import PinPanel
@@ -208,7 +209,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.44','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.45','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -367,7 +368,11 @@ class Window(QMainWindow):
         self.rgb_tool=RgbPanel(self,label,button,card); layout.addWidget(self.rgb_tool); self.rgb_tool.hide()
         self.pin_tool=PinPanel(self,label,button,card); layout.addWidget(self.pin_tool); self.pin_tool.hide()
         self.radar=RadarPanel(self,label,button,card); layout.addWidget(self.radar); self.radar.hide()
+        self.camera=CameraPanel(self,label,button,card); layout.addWidget(self.camera); self.camera.hide()
         layout.addStretch()
+
+    def open_camera(self):
+        self.radar.hide(); self.serial_tool.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.camera.show(); self.title.setText('摄像头助手（内测版）'); self.subtitle.setText('摄像头检测与抓拍。'); self.camera.refresh()
 
     def open_radar(self):
         self.serial_tool.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.radar.show()

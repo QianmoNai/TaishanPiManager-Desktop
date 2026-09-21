@@ -176,6 +176,12 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/camera-inventory':
+                from camera_plugin import inventory
+                return inventory(self.adb, serial)
+            if path == '/api/camera-capture':
+                from camera_plugin import capture
+                return capture(self.adb, serial, data.get('device'))
             if path == '/api/ld06-status':
                 from ld06_plugin import status
                 return status(self.adb, serial)

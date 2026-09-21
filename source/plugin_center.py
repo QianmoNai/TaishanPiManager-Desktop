@@ -27,6 +27,7 @@ class PluginCenter(QWidget):
         items=[
             ('traffic','网络流量','实时速度、双向测速与累计流量，清晰掌握每一次收发。','网络','wifi','#007aff','v2.0 · 随软件提供',None),
             ('proxy','网络代理','Mihomo 核心安装、配置导入、规则分流与策略组切换。','网络','usb','#8b5cf6','Mihomo 1.19.31 · ARM64',None),
+            ('camera','摄像头助手（内测版）','检测 USB 摄像头并查看视频设备信息。','系统','settings','#38a169','v0.1 · 内测版',None),
             ('ld06','LD06 雷达视图','可选安装，UART3 雷达实时扫描、距离显示与点云导出。','系统','settings','#30b89a','v1.0 · 可选安装',None),
             ('serial','串口助手','UART3 排针串口参数、文本/HEX 收发、VOFA 协议波形与引脚配置。','系统','usb','#e5a13d','内置工具 · ADB 串口会话',None),
             ('rgb','RGB 灯控制','控制板载 RGB 灯亮灭、预设颜色与独立红绿蓝通道。','系统','settings','#e35d6a','内置工具 · ADB LED 控制',None),
@@ -40,10 +41,10 @@ class PluginCenter(QWidget):
             frame,box=card(); box.setSpacing(10); frame.setMinimumHeight(205)
             row=QHBoxLayout(); tile=label(); tile.setPixmap(icon(symbol,color,34).pixmap(34,34)); row.addWidget(tile)
             titles=QVBoxLayout(); titles.setSpacing(3); titles.addWidget(label(title,'section')); titles.addWidget(label(meta,'caption')); row.addLayout(titles,1)
-            badge=label('待检测' if key in ('traffic','proxy','ld06') else '内置','badge'); row.addWidget(badge); box.addLayout(row)
+            badge=label('待检测' if key in ('traffic','proxy','ld06','camera') else '内置','badge'); row.addWidget(badge); box.addLayout(row)
             box.addWidget(label(description,'subtle',True)); box.addStretch()
-            row=QHBoxLayout(); row.addWidget(label(category+' · '+('板端插件' if key in ('traffic','proxy','ld06') else '桌面工具'),'caption')); row.addStretch()
-            open_btn=button('查看详情' if key in ('traffic','proxy','ld06') else '打开',lambda checked=False,p=page,k=key:owner.open_radar() if k=='ld06' else owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_pin() if k=='pin' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy','ld06') else 'secondary')
+            row=QHBoxLayout(); row.addWidget(label(category+' · '+('板端插件' if key in ('traffic','proxy','ld06','camera') else '桌面工具'),'caption')); row.addStretch()
+            open_btn=button('查看详情' if key in ('traffic','proxy','ld06','camera') else '打开',lambda checked=False,p=page,k=key:owner.open_radar() if k=='ld06' else owner.open_camera() if k=='camera' else owner.open_serial() if k=='serial' else owner.open_rgb() if k=='rgb' else owner.open_pin() if k=='pin' else owner.open_proxy() if k=='proxy' else self.open_traffic() if p is None else owner.go(p),'primary' if key in ('traffic','proxy','ld06','camera') else 'secondary')
             row.addWidget(open_btn); box.addLayout(row)
             if key=='traffic': self.traffic_badge=badge; self.traffic_open=open_btn
             if key=='proxy': self.proxy_badge=badge

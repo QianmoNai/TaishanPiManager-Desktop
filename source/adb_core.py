@@ -176,6 +176,9 @@ class App:
             return {'message': msg, 'devices': devices}
         serial, lock = self.device(data)
         try:
+            if path == '/api/ld06-status':
+                from ld06_plugin import status
+                return status(self.adb, serial)
             if path.startswith('/api/proxy-'):
                 from proxy_plugin import dispatch
                 return dispatch(self.adb, serial, path.removeprefix('/api/proxy-'), data)

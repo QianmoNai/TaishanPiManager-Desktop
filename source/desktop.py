@@ -1,5 +1,6 @@
 """Native Qt Widgets desktop application. No browser, webview or HTTP listener."""
 from __future__ import annotations
+from ld06_widget import RadarPanel
 from serial_widget import SerialPanel
 from rgb_widget import RgbPanel
 from pin_widget import PinPanel
@@ -207,7 +208,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.41','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.42','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -223,7 +224,7 @@ class Window(QMainWindow):
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
         self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password,self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn,self.wifi_local,self.wifi_local_connect_btn]
-        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn,*self.pin_tool.controls()])
+        self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn,*self.pin_tool.controls(),*self.radar.controls()])
         # Proxy handlers guard busy operations without disabling the focused card.
         # Disabling focused controls makes QScrollArea jump to another focus target.
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
@@ -365,23 +366,33 @@ class Window(QMainWindow):
         self.serial_tool=SerialPanel(self,label,button,card); layout.addWidget(self.serial_tool); self.serial_tool.hide()
         self.rgb_tool=RgbPanel(self,label,button,card); layout.addWidget(self.rgb_tool); self.rgb_tool.hide()
         self.pin_tool=PinPanel(self,label,button,card); layout.addWidget(self.pin_tool); self.pin_tool.hide()
+        self.radar=RadarPanel(self,label,button,card); layout.addWidget(self.radar); self.radar.hide()
         layout.addStretch()
 
+    def open_radar(self):
+        self.serial_tool.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.radar.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0)
+        self.title.setText('LD06 雷达视图'); self.subtitle.setText('可选安装 · 实时二维扫描与点云导出。'); self.radar.action('status')
+
     def open_serial(self):
+        self.radar.hide()
         self.proxy.hide(); self.rgb_tool.hide(); self.pin_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('串口助手'); self.subtitle.setText('UART3 · 串口收发、波形与引脚配置。'); self.serial_tool.refresh()
 
     def open_rgb(self):
+        self.radar.hide()
         self.serial_tool.hide(); self.proxy.hide(); self.pin_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.rgb_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0); self.title.setText('RGB 灯控制'); self.subtitle.setText('板载 RGB · 颜色预设与独立通道控制。'); self.rgb_tool.refresh()
 
     def open_pin(self):
+        self.radar.hide()
         self.serial_tool.hide(); self.rgb_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.pin_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('引脚助手'); self.subtitle.setText('GPIO · I2C · SPI · PWM 资源查看与硬件调试。'); self.pin_tool.refresh()
 
     def open_proxy(self):
+        self.radar.hide()
         self.serial_tool.hide()
         self.rgb_tool.hide()
         self.pin_tool.hide()
@@ -391,6 +402,7 @@ class Window(QMainWindow):
         self.proxy.action('status')
 
     def open_plugin(self):
+        self.radar.hide()
         self.serial_tool.hide()
         self.rgb_tool.hide()
         self.pin_tool.hide()
@@ -411,6 +423,7 @@ class Window(QMainWindow):
         else: self.refresh_plugins()
 
     def close_plugin(self):
+        self.radar.hide()
         self.serial_tool.hide()
         self.rgb_tool.hide()
         self.pin_tool.hide()
@@ -426,7 +439,7 @@ class Window(QMainWindow):
         if self.busy: return
         self.plugin_center.render({'state':'unknown'})
         self.plugin_center.hint.setText('正在读取当前设备的插件状态…')
-        self.work(lambda:{**self.call('plugin-status'),'proxy':self.call('proxy-status')},self.plugin_center.render,'正在刷新插件状态…')
+        self.work(lambda:{**self.call('plugin-status'),'proxy':self.call('proxy-status'),'ld06':self.call('ld06-status')},self.plugin_center.render,'正在刷新插件状态…')
 
     def build_wifi(self):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_pending=False
@@ -636,6 +649,7 @@ class Window(QMainWindow):
         if refresh and index==0: self.poll()
         if refresh and index==5: self.refresh_network_status()
         if index==4:
+            self.radar.hide()
             self.serial_tool.hide()
             self.rgb_tool.hide()
             self.pin_tool.hide()
@@ -698,7 +712,7 @@ class Window(QMainWindow):
 
     def select_device(self):
         selected=self.device_select.currentData() or ''
-        if selected!=self.serial and (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active()):
+        if selected!=self.serial and (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active() or self.radar.active()):
             if not self.ask('切换设备','切换设备会关闭全部终端和串口会话，是否继续？'):
                 self.device_select.blockSignals(True); self.device_select.setCurrentIndex(max(0,self.device_select.findData(self.serial))); self.device_select.blockSignals(False); return
         if selected!=self.serial: self.serial=selected; self.reset_data()
@@ -710,6 +724,7 @@ class Window(QMainWindow):
             transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'ADB'); self.hero_tag.setText(transport+' 已连接   ·   Linux / Buildroot'); self.connection_hint.setText('所有操作仅针对当前选中的设备。'); QTimer.singleShot(0,self.poll)
 
     def reset_data(self):
+        self.radar.reset(); self.radar.hide()
         self.serial_tool.reset(); self.serial_tool.hide()
         self.rgb_tool.reset(); self.rgb_tool.hide()
         self.pin_tool.reset(); self.pin_tool.hide()
@@ -887,10 +902,10 @@ class Window(QMainWindow):
     def closeEvent(self,event):
         if self.busy or self.pool.activeThreadCount() or self.traffic.pool.activeThreadCount():
             self.notify('操作仍在进行，请等待结束后关闭窗口。',True); event.ignore(); return
-        if (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
+        if (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active() or self.radar.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
             event.ignore(); return
         for term in self.terminals: term.disconnect_device()
-        self.serial_tool.shutdown(); self.timer.stop(); self.traffic.timer.stop(); event.accept()
+        self.radar.shutdown(); self.serial_tool.shutdown(); self.timer.stop(); self.traffic.timer.stop(); event.accept()
 
 
 STYLE='''
@@ -1045,7 +1060,7 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==9 and hasattr(window,'rgb_tool') and hasattr(window,'pin_tool')
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==10 and hasattr(window,'rgb_tool') and hasattr(window,'pin_tool')
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             from serial_assistant import ASSETS as SERIAL_ASSETS

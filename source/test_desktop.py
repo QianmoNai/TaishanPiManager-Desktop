@@ -66,6 +66,18 @@ class DesktopTests(unittest.TestCase):
         panel.render({})
         self.assertIn('PWM 0',panel.state.text())
 
+    def test_radar_navigation_optional_install_and_reset(self):
+        self.window.go(4,refresh=False)
+        self.window.open_radar()
+        self.assertFalse(self.window.radar.isHidden())
+        self.assertTrue(self.window.pin_tool.isHidden())
+        self.window.radar.plot.points[0]=(0,1,100,0)
+        self.window.radar.reset()
+        self.assertEqual(self.window.radar.plot.points,{})
+        self.window.open_serial()
+        self.assertTrue(self.window.radar.isHidden())
+        self.assertFalse(self.window.serial_tool.isHidden())
+
     def test_empty_device_and_all_pages(self):
         self.window.render_devices([])
         self.assertEqual(self.window.serial,'')

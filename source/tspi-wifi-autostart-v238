@@ -1,0 +1,49 @@
+#!/bin/sh
+IFACE=wlan0
+[ -n "$IFACE" ] || IFACE=$(cat /userdata/etc/tspi-wifi.interface 2>/dev/null)
+[ -n "$IFACE" ] || IFACE=wlan0
+CONF=/etc/wpa_supplicant.conf
+LEGACY=/userdata/etc/tspi-wifi.conf
+CTRL=/var/run/wpa_supplicant
+mkdir -p "$CTRL" || exit 1
+# ifupdown normally starts wpa_supplicant before this fallback hook.  Do not
+# terminate that process: doing so races with ifupdown and loses the profile.
+count=0
+while [ "$count" -lt 60 ]; do
+    if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
+        # A running supplicant can still have every profile disabled or be
+        # waiting in a stale scan. Re-enable saved profiles and request a
+        # reconnect so automatic boot recovery is deterministic.
+        wpa_cli -p "$CTRL" -i "$IFACE" enable_network all >/dev/null 2>&1 || true
+        wpa_cli -p "$CTRL" -i "$IFACE" reconnect >/dev/null 2>&1 || true
+        if command -v dhcpcd >/dev/null 2>&1; then
+            (dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1) &
+        else
+            if command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+                (udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1) &
+            fi
+        fi
+        exit 0
+    fi
+    count=$((count+1)); sleep 1
+done
+[ -d "/sys/class/net/$IFACE" ] || exit 1
+# Recover the last known profile if the system copy was removed or truncated.
+if [ ! -s "$CONF" ] && [ -s "$LEGACY" ]; then
+    cp -p "$LEGACY" "$CONF" || exit 1
+    chmod 600 "$CONF" || exit 1
+fi
+[ -s "$CONF" ] || exit 1
+ip link set "$IFACE" up >/dev/null 2>&1 || exit 1
+wpa_supplicant -B -i "$IFACE" -c "$CONF" -C "$CTRL" >/dev/null 2>&1 || exit 1
+sleep 1
+wpa_cli -p "$CTRL" -i "$IFACE" enable_network all >/dev/null 2>&1 || true
+wpa_cli -p "$CTRL" -i "$IFACE" reconnect >/dev/null 2>&1 || true
+if command -v dhcpcd >/dev/null 2>&1; then
+    (dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1) &
+else
+    if command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+        (udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1) &
+    fi
+fi
+exit 0

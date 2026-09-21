@@ -57,6 +57,12 @@ for dev in /sys/class/net/*; do
   [ -d "$dev/wireless" ] || grep -q '^DEVTYPE=wlan$' "$dev/uevent" 2>/dev/null || continue
   name=${dev##*/}
   case "$name" in p2p*|lo) continue;; esac
+  # Keep the primary wlan0 and interfaces with a real wpa_supplicant
+  # control socket. Some Broadcom images expose wlan1 as a P2P helper
+  # without a control socket; showing it makes connection attempts hang.
+  if [ "$name" != wlan0 ]; then
+    [ -S "/var/run/wpa_supplicant/$name" ] || [ -S "/run/wpa_supplicant/$name" ] || [ -S "/tmp/wpa_supplicant/$name" ] || continue
+  fi
   interfaces="$interfaces $name"
 done
 printf '@@interfaces\n%s\n' "$interfaces"
@@ -95,6 +101,7 @@ ERRORS = {
     'INTERFACE_CHANGED': '无线网卡已变化，请重新选择网卡并扫描。',
     'OTHER_MANAGER': '该系统使用其他网络管理服务，本版本仅支持泰山派 Buildroot 的 wpa_supplicant。',
     'NOT_RUNNING': 'Wi-Fi 服务尚未启动，请先点击“扫描附近 Wi-Fi”。',
+    'SCAN_STUCK': '无线网卡长时间停留在扫描状态，请先刷新状态；如果仍未恢复，请通过 USB 重启无线服务。',
     'NO_CONTROL_SOCKET': '无线服务正在运行但控制接口不可用，请检查 wpa_supplicant 的 ctrl_interface 配置。',
     'NO_SUPPLICANT': '固件缺少 wpa_supplicant。',
     'RADIO_DOWN': '无法启用无线网卡，请检查驱动或无线开关。',
@@ -142,20 +149,40 @@ mkdir -p "$CTRL" || exit 1
 count=0
 while [ "$count" -lt 60 ]; do
     if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
+        # A running supplicant can still have every profile disabled or be
+        # waiting in a stale scan. Re-enable saved profiles and request a
+        # reconnect so automatic boot recovery is deterministic.
+        wpa_cli -p "$CTRL" -i "$IFACE" enable_network all >/dev/null 2>&1 || true
+        wpa_cli -p "$CTRL" -i "$IFACE" reconnect >/dev/null 2>&1 || true
+        if command -v dhcpcd >/dev/null 2>&1; then
+            (dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1) &
+        else
+            if command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+                (udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1) &
+            fi
+        fi
         exit 0
     fi
     count=$((count+1)); sleep 1
 done
 [ -d "/sys/class/net/$IFACE" ] || exit 1
-[ -s "$CONF" ] || CONF="$LEGACY"
+# Recover the last known profile if the system copy was removed or truncated.
+if [ ! -s "$CONF" ] && [ -s "$LEGACY" ]; then
+    cp -p "$LEGACY" "$CONF" || exit 1
+    chmod 600 "$CONF" || exit 1
+fi
 [ -s "$CONF" ] || exit 1
 ip link set "$IFACE" up >/dev/null 2>&1 || exit 1
 wpa_supplicant -B -i "$IFACE" -c "$CONF" -C "$CTRL" >/dev/null 2>&1 || exit 1
 sleep 1
+wpa_cli -p "$CTRL" -i "$IFACE" enable_network all >/dev/null 2>&1 || true
+wpa_cli -p "$CTRL" -i "$IFACE" reconnect >/dev/null 2>&1 || true
 if command -v dhcpcd >/dev/null 2>&1; then
-    dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1 &
-elif command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
-    udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1 &
+    (dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1) &
+else
+    if command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+        (udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1) &
+    fi
 fi
 exit 0
 '''
@@ -250,10 +277,13 @@ chmod 755 /userdata/bin/tspi-wifi-autostart || fail_save
 printf %s {shlex.quote(persistent_init)} > /etc/init.d/S40tspi-wifi || fail_save
 chmod 755 /etc/init.d/S40tspi-wifi || fail_save
 sync || fail_save
-'''
+'''.replace('{shlex.quote(persistent_helper)}', shlex.quote(persistent_helper)).replace('{shlex.quote(persistent_init)}', shlex.quote(persistent_init))
         script = self.prepare(True) + r'''
 fail_setup() { echo ERR:SETUP_FAILED; exit 1; }
 fail_save() { echo ERR:SAVE_FAILED; exit 1; }
+# A previous scan can leave some Broadcom firmware in SCANNING. Cancel it
+# before changing profiles so select_network can start authentication.
+cli abort_scan >/dev/null 2>&1 || true
 old_id=$(cli status | sed -n 's/^id=//p')
 all_ids=$(cli list_networks | awk -F '\t' 'NR>1 && $1 ~ /^[0-9]+$/ {print $1}')
 # A previous version could leave older profiles disabled after select_network.

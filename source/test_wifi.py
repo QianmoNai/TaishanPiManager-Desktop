@@ -1,6 +1,7 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import hashlib
+import shlex
 import unittest
 from unittest.mock import patch
 
@@ -32,6 +33,9 @@ class WifiBackendTests(unittest.TestCase):
         self.assertIn('CONF=/etc/wpa_supplicant.conf',helper)
         self.assertNotIn('wpa_cli -p "$CTRL" -i "$IFACE" terminate',helper)
         self.assertIn('wpa_supplicant -B',helper)
+        self.assertIn('enable_network all',helper)
+        self.assertIn('reconnect',helper)
+        self.assertIn('cp -p "$LEGACY" "$CONF"',helper)
         self.assertIn('/etc/init.d/S40tspi-wifi',init) if False else self.assertIn('start)',init)
 
     def test_scan_utf8_escaping_signal_and_security(self):
@@ -55,6 +59,10 @@ class WifiBackendTests(unittest.TestCase):
         adb=FakeAdb(reply); password='test$pass\'word'; ssid=b'Test'
         result=Wifi(adb,'usb','wlan0').connect({'ssid_hex':ssid.hex(),'security':'psk','password':password})
         script=adb.scripts[0]
+        self.assertNotIn('{shlex.quote(', script)
+        _, helper, init = persistent_wifi_files('wlan0', ssid.hex(), 'open')
+        self.assertIn('printf %s ' + shlex.quote(helper), script)
+        self.assertIn('printf %s ' + shlex.quote(init), script)
         self.assertNotIn(password,script)
         self.assertIn(hashlib.pbkdf2_hmac('sha1',password.encode(),ssid,4096,32).hex(),script)
         self.assertIn('set update_config 1',script)

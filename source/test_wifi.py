@@ -2,6 +2,8 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import hashlib
 import shlex
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -98,7 +100,7 @@ class WifiBackendTests(unittest.TestCase):
         adb=FakeAdb(b'@@interface\nwlan0\n@@interfaces\nwlan0\n@@status\nwpa_state=COMPLETED\nssid=Second\nid=2\n@@connected\nyes\n')
         Wifi(adb,'usb','wlan0').connect({'ssid_hex':'5365636f6e64','security':'open'})
         script=adb.scripts[0]
-        self.assertIn('cp -p /etc/wpa_supplicant.conf /userdata/etc/.tspi-wifi.conf.tmp',script)
+        self.assertIn('cp -p "$active_conf" /userdata/etc/.tspi-wifi.conf.tmp',script)
         self.assertIn('save_config',script)
         self.assertIn('enable_network \"$new_id\"',script)
         self.assertIn('all_ids=',script)
@@ -110,7 +112,13 @@ class WifiBackendTests(unittest.TestCase):
 
 class WifiUiTests(unittest.TestCase):
     setUpClass = classmethod(test_desktop.DesktopTests.setUpClass.__func__)
-    setUp = test_desktop.DesktopTests.setUp
+    def setUp(self):
+        folder=tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        from wifi_profiles import ProfileStore
+        patcher=patch('wifi_profiles.ProfileStore',lambda:ProfileStore(Path(folder.name)/'profiles.dpapi'))
+        patcher.start(); self.addCleanup(patcher.stop)
+        test_desktop.DesktopTests.setUp(self)
     tearDown = test_desktop.DesktopTests.tearDown
     wait_idle = test_desktop.DesktopTests.wait_idle
     connect_fake = test_desktop.DesktopTests.connect_fake

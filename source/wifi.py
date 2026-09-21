@@ -261,23 +261,7 @@ printf '@@status\n'; cli status
         persistent_config, persistent_helper, persistent_init = persistent_wifi_files(self.interface, ssid_hex, mode, psk if mode == 'psk' else '')
         # wpa_cli save_config writes the complete profile set. Preserve every
         # network block instead of replacing it with only the newly selected SSID.
-        persist = r'''
-umask 077
-mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
-[ -s /etc/wpa_supplicant.conf ] || fail_save
-cp -p /etc/wpa_supplicant.conf /userdata/etc/.tspi-wifi.conf.tmp || fail_save
-chmod 600 /userdata/etc/.tspi-wifi.conf.tmp || fail_save
-mv /userdata/etc/.tspi-wifi.conf.tmp /userdata/etc/tspi-wifi.conf || fail_save
-printf '%s\n' "$iface" > /userdata/etc/tspi-wifi.interface || fail_save
-cp -p /etc/wpa_supplicant.conf /etc/.tspi-wifi.conf.tmp || fail_save
-chmod 600 /etc/.tspi-wifi.conf.tmp || fail_save
-mv /etc/.tspi-wifi.conf.tmp /etc/wpa_supplicant.conf || fail_save
-printf %s {shlex.quote(persistent_helper)} > /userdata/bin/tspi-wifi-autostart || fail_save
-chmod 755 /userdata/bin/tspi-wifi-autostart || fail_save
-printf %s {shlex.quote(persistent_init)} > /etc/init.d/S40tspi-wifi || fail_save
-chmod 755 /etc/init.d/S40tspi-wifi || fail_save
-sync || fail_save
-'''.replace('{shlex.quote(persistent_helper)}', shlex.quote(persistent_helper)).replace('{shlex.quote(persistent_init)}', shlex.quote(persistent_init))
+        persist = persistence_script(self.interface)
         script = self.prepare(True) + r'''
 fail_setup() { echo ERR:SETUP_FAILED; exit 1; }
 fail_save() { echo ERR:SAVE_FAILED; exit 1; }
@@ -340,3 +324,36 @@ printf '@@connected\nyes\n'
         if not confirmed or result['state'] != 'COMPLETED': raise UserError('连接状态尚未确认，请刷新 Wi-Fi 状态。')
         result['message'] = ('已连接 Wi-Fi，IPv4：' + result['ip']) if result['ip'] else 'Wi-Fi 已认证，尚未获取 IPv4 地址，请稍后刷新状态。'
         return result
+
+
+def persistence_script(interface):
+    _, persistent_helper, persistent_init = persistent_wifi_files(interface, "00", "open")
+    return r'''
+umask 077
+mkdir -p /userdata/etc /userdata/bin /etc/init.d || fail_save
+# save_config atomically replaces its target, including a former symlink.
+# Read the daemon's actual -c path rather than a stale /etc copy.
+active_conf=/etc/wpa_supplicant.conf
+for pid in $(pidof wpa_supplicant); do
+  proc_iface=''; proc_conf=''; previous=''
+  for arg in $(tr '\000' ' ' < /proc/$pid/cmdline); do
+    case "$previous" in -i) proc_iface=$arg;; -c) proc_conf=$arg;; esac
+    case "$arg" in -i?*) proc_iface=${arg#-i};; -c?*) proc_conf=${arg#-c};; esac
+    previous=$arg
+  done
+  if [ "$proc_iface" = "$iface" ] && [ -n "$proc_conf" ]; then active_conf=$proc_conf; break; fi
+done
+[ -s "$active_conf" ] || fail_save
+cp -p "$active_conf" /userdata/etc/.tspi-wifi.conf.tmp || fail_save
+chmod 600 /userdata/etc/.tspi-wifi.conf.tmp || fail_save
+mv /userdata/etc/.tspi-wifi.conf.tmp /userdata/etc/tspi-wifi.conf || fail_save
+printf '%s\n' "$iface" > /userdata/etc/tspi-wifi.interface || fail_save
+cp -p "$active_conf" /etc/.tspi-wifi.conf.tmp || fail_save
+chmod 600 /etc/.tspi-wifi.conf.tmp || fail_save
+mv /etc/.tspi-wifi.conf.tmp /etc/wpa_supplicant.conf || fail_save
+printf %s {shlex.quote(persistent_helper)} > /userdata/bin/tspi-wifi-autostart || fail_save
+chmod 755 /userdata/bin/tspi-wifi-autostart || fail_save
+printf %s {shlex.quote(persistent_init)} > /etc/init.d/S40tspi-wifi || fail_save
+chmod 755 /etc/init.d/S40tspi-wifi || fail_save
+sync || fail_save
+'''.replace('{shlex.quote(persistent_helper)}', shlex.quote(persistent_helper)).replace('{shlex.quote(persistent_init)}', shlex.quote(persistent_init))

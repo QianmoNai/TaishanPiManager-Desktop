@@ -200,6 +200,9 @@ class App:
             if path.startswith('/api/pin-'):
                 from pin_assistant import dispatch
                 return dispatch(self.adb, serial, path.removeprefix('/api/pin-'), data)
+            if path == '/api/wifi-sync':
+                from wifi_profiles import ProfileStore, sync_profiles
+                return sync_profiles(self.adb, serial, data.get('interface', ''), ProfileStore().read())
             if path in ('/api/wifi-scan', '/api/wifi-status', '/api/wifi-connect'):
                 from wifi import Wifi
                 wifi = Wifi(self.adb, serial, data.get('interface', ''))

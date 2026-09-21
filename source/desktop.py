@@ -207,7 +207,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.38','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.39','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -222,7 +222,7 @@ class Window(QMainWindow):
         self.stack=QStackedWidget(); outer.addWidget(self.stack,1)
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
-        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password]
+        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password,self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn,self.wifi_local]
         self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn,*self.pin_tool.controls()])
         # Proxy handlers guard busy operations without disabling the focused card.
         # Disabling focused controls makes QScrollArea jump to another focus target.
@@ -457,8 +457,51 @@ class Window(QMainWindow):
         self.wifi_password.setPlaceholderText('输入 Wi-Fi 密码'); self.wifi_password.setAccessibleName('Wi-Fi 密码'); self.wifi_password.setMaxLength(128)
         self.wifi_show_password=QCheckBox('显示密码'); self.wifi_show_password.toggled.connect(lambda checked:self.wifi_password.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password))
         self.wifi_connect_btn=button('连接 Wi-Fi',self.connect_wifi,'primary'); row.addWidget(self.wifi_password,1); row.addWidget(self.wifi_show_password); row.addWidget(self.wifi_connect_btn); box.addLayout(row)
-        box.addWidget(label('建议使用 USB 连接。切换 Wi-Fi 可能中断网络 ADB；密码不保存在电脑上。','caption',True))
+        box.addWidget(label('建议使用 USB 连接。切换 Wi-Fi 可能中断网络 ADB；密码加密保存在当前 Windows 用户的本地配置中。','caption',True))
+        localrow=QHBoxLayout()
+        self.wifi_local=QComboBox(); self.wifi_local.setMinimumWidth(180)
+        localrow.addWidget(self.wifi_local,1)
+        self.wifi_save_btn=button('保存到本地',self.save_local_wifi)
+        self.wifi_delete_btn=button('删除本地配置',self.delete_local_wifi)
+        self.wifi_sync_btn=button('全部同步到泰山派',self.sync_local_wifi,'primary')
+        for btn in (self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn): localrow.addWidget(btn)
+        box.addLayout(localrow)
+        box.addWidget(label('本地 Wi-Fi 配置跨软件版本保留；删除本地配置不会删除板端网络。','caption',True))
+        self.reload_local_wifi()
         box.addWidget(label('连接成功后会保存到泰山派的 wpa_supplicant 配置，重新上电将自动连接。','caption',True)); layout.addWidget(frame); layout.addStretch()
+
+    def reload_local_wifi(self):
+        from wifi_profiles import ProfileStore
+        self.wifi_local.clear()
+        try:
+            for row in ProfileStore().summaries():
+                self.wifi_local.addItem(bytes.fromhex(row['ssid_hex']).decode('utf-8','replace'),row['ssid_hex'])
+            if not self.wifi_local.count(): self.wifi_local.addItem('尚无本地配置','')
+        except Exception:
+            self.wifi_local.addItem('本地配置读取失败','')
+
+    def save_local_wifi(self):
+        from wifi_profiles import ProfileStore
+        network=self.selected_wifi()
+        if not network: self.notify('请先扫描并选择 Wi-Fi。',True); return
+        try:
+            ProfileStore().save({**network,'password':self.wifi_password.text()})
+            self.reload_local_wifi(); self.notify('已加密保存到本地，可点击全部同步到泰山派。')
+        except Exception as exc: self.notify(str(exc),True)
+
+    def delete_local_wifi(self):
+        from wifi_profiles import ProfileStore
+        ssid=self.wifi_local.currentData()
+        if not ssid: return
+        try:
+            ProfileStore().delete(ssid); self.reload_local_wifi(); self.notify('已删除本地配置，板端配置不变。')
+        except Exception as exc: self.notify(str(exc),True)
+
+    def sync_local_wifi(self):
+        if not self.require_device() or self.busy: return
+        data={'interface':self.wifi_iface.currentData() or ''}
+        self.work(lambda:self.call('wifi-sync',data),
+                  lambda result:self.notify(result['message']),'正在同步本地 Wi-Fi 配置…')
 
     def clear_wifi_selection(self, *args):
         self.wifi_scan_serial=''; self.wifi_scan_iface=''; self.wifi_table.setRowCount(0)
@@ -476,6 +519,12 @@ class Window(QMainWindow):
         self.wifi_selected.setText('连接到 '+(network['ssid'] or '隐藏网络') if network else '选择一个 Wi-Fi 网络')
         self.wifi_password.setPlaceholderText('开放网络无需密码' if network and network['security']=='open' else '输入 Wi-Fi 密码')
         self.wifi_password.setReadOnly(bool(network and network['security']!='psk'))
+        if network:
+            from wifi_profiles import ProfileStore
+            try:
+                saved=next((r for r in ProfileStore().read() if r['ssid_hex']==network['ssid_hex'] and r['security']==network['security']),None)
+                if saved: self.wifi_password.setText(saved['password'])
+            except Exception: self.notify('无法读取本地 Wi-Fi 配置，请重新输入密码。',True)
 
     def scan_wifi(self):
         if not self.require_device() or self.busy: return
@@ -544,9 +593,12 @@ class Window(QMainWindow):
         data={'interface':self.wifi_scan_iface,'ssid_hex':network['ssid_hex'],'security':network['security'],'password':self.wifi_password.text()}
         self.wifi_password.clear(); self.wifi_show_password.setChecked(False); self.wifi_status.setText('正在连接 '+network['ssid']+'，请等待认证和地址分配…')
         def operation():
-            try: return self.call('wifi-connect',data)
+            try:
+                from wifi_profiles import ProfileStore
+                ProfileStore().save(data)
+                return self.call('wifi-connect',data)
             finally: data['password']=''
-        def connected(result): self.render_wifi_status(result); self.notify(result['message'])
+        def connected(result): self.reload_local_wifi(); self.render_wifi_status(result); self.notify(result['message'])
         self.wifi_pending=True
         self.work(operation,connected,'正在连接 Wi-Fi，最多约 1 分钟…')
 

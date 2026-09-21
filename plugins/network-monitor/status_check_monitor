@@ -1,0 +1,3 @@
+#!/bin/sh
+# TSPI_MANAGER_MONITOR_V1
+exec /userdata/bin/monitor_service status

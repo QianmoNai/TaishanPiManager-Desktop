@@ -1,0 +1,6 @@
+{
+  "result": "下载 46.93 Mbps    上传 41.27 Mbps\n目标 192.168.1.148:40678 · wlan0 · 13:24:39",
+  "sample_updates_during_test": 10,
+  "download_delta_bytes": 31307560,
+  "upload_delta_bytes": 27488675
+}

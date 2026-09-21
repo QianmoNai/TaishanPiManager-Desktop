@@ -1,0 +1,12 @@
+#!/bin/sh
+# TSPI_MANAGER_PROXY_V1
+BASE=/userdata/network-proxy
+case "$1" in
+    start)
+        [ -f "$BASE/autostart" ] && [ -x "$BASE/proxy-service" ] || exit 0
+        (umask 077; "$BASE/proxy-service" start > "$BASE/boot.log" 2>&1) < /dev/null &
+        ;;
+    stop) [ ! -x "$BASE/proxy-service" ] || "$BASE/proxy-service" stop;;
+    restart) [ ! -x "$BASE/proxy-service" ] || "$BASE/proxy-service" restart;;
+esac
+exit 0

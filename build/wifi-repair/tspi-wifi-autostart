@@ -1,0 +1,29 @@
+#!/bin/sh
+IFACE=wlan0
+[ -n "$IFACE" ] || IFACE=$(cat /userdata/etc/tspi-wifi.interface 2>/dev/null)
+[ -n "$IFACE" ] || IFACE=wlan0
+CONF=/etc/wpa_supplicant.conf
+LEGACY=/userdata/etc/tspi-wifi.conf
+CTRL=/var/run/wpa_supplicant
+mkdir -p "$CTRL" || exit 1
+# ifupdown normally starts wpa_supplicant before this fallback hook.  Do not
+# terminate that process: doing so races with ifupdown and loses the profile.
+count=0
+while [ "$count" -lt 60 ]; do
+    if wpa_cli -p "$CTRL" -i "$IFACE" ping 2>/dev/null | grep -q '^PONG$'; then
+        exit 0
+    fi
+    count=$((count+1)); sleep 1
+done
+[ -d "/sys/class/net/$IFACE" ] || exit 1
+[ -s "$CONF" ] || CONF="$LEGACY"
+[ -s "$CONF" ] || exit 1
+ip link set "$IFACE" up >/dev/null 2>&1 || exit 1
+wpa_supplicant -B -i "$IFACE" -c "$CONF" -C "$CTRL" >/dev/null 2>&1 || exit 1
+sleep 1
+if command -v dhcpcd >/dev/null 2>&1; then
+    dhcpcd -n "$IFACE" </dev/null >/dev/null 2>&1 &
+elif command -v udhcpc >/dev/null 2>&1 && ! pidof udhcpc >/dev/null 2>&1; then
+    udhcpc -i "$IFACE" -n -q -t 3 -T 3 </dev/null >/dev/null 2>&1 &
+fi
+exit 0

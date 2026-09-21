@@ -1,0 +1,17 @@
+{
+  "mode": "public",
+  "node": "昆山 · 昆山杜克大学",
+  "target": "speedtest.dukekunshan.edu.cn:8080",
+  "interface": "wlan0",
+  "latency_ms": 142.71092414856,
+  "download": {
+    "bytes": 466278,
+    "seconds": 8.06154704093933,
+    "mbps": 0.462718133511673
+  },
+  "upload": {
+    "bytes": 655360,
+    "seconds": 7.80003499984741,
+    "mbps": 0.672161086469812
+  }
+}

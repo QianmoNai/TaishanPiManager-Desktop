@@ -1,0 +1,4 @@
+下载 0.19 Mbps    上传 19.49 Mbps
+苏州 · JSQY · HTTP 响应延迟 72 ms
+短时单连接结果，受 Wi-Fi 和节点负载影响。
+目标 speedtest.jsqiuying.com:8080 · wlan0 · 18:56:48

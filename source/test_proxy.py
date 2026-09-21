@@ -65,7 +65,7 @@ class ProxyUiTests(unittest.TestCase):
     def test_catalog_navigation_and_device_reset(self):
         w=self.window
         self.assertEqual(w.net_btn.text(),'无线连接')
-        self.assertEqual(len(w.plugin_center.cards),7)
+        self.assertEqual(len(w.plugin_center.cards),8)
         w.go(4,False); w.open_proxy()
         self.assertTrue(w.proxy.isVisible()); self.assertFalse(w.plugin_center.isVisible())
         w.proxy.render({'groups':[{'name':'group','type':'Selector','now':'DIRECT','all':['DIRECT','REJECT']}],'mode':'global'})

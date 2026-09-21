@@ -191,6 +191,12 @@ class App:
             if path == '/api/monitor-install':
                 from monitor_plugin import install
                 return install(self.adb, serial, data)
+            if path == '/api/rgb-status':
+                from rgb_control import status
+                return status(self.adb, serial)
+            if path == '/api/rgb-set':
+                from rgb_control import set_color
+                return set_color(self.adb, serial, data)
             if path in ('/api/wifi-scan', '/api/wifi-status', '/api/wifi-connect'):
                 from wifi import Wifi
                 wifi = Wifi(self.adb, serial, data.get('interface', ''))

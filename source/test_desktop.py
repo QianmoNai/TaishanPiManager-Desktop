@@ -31,6 +31,8 @@ class FakeApi:
         if path=='/api/files': return {'path':data['path'],'limited':False,'files':[{'name':'log','type':'d','size':0,'modified':1700000000},{'name':"a'; test.txt",'type':'f','size':8192,'modified':1700000000}]}
         if path=='/api/logs': return {'output':'kernel ready\n测试日志'}
         if path=='/api/command': return {'output':'Linux test','code':0}
+        if path=='/api/rgb-status': return {'r':0,'g':0,'b':1}
+        if path=='/api/rgb-set': return {'r':data['r'],'g':data['g'],'b':data['b']}
         return {'devices':[]}
 
 

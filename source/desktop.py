@@ -1,6 +1,7 @@
 """Native Qt Widgets desktop application. No browser, webview or HTTP listener."""
 from __future__ import annotations
 from serial_widget import SerialPanel
+from rgb_widget import RgbPanel
 
 import os
 from pathlib import Path
@@ -205,7 +206,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.30','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.33','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -361,15 +362,21 @@ class Window(QMainWindow):
         layout.addWidget(self.plugin_detail); self.plugin_detail.hide(); self.plugin_center.detail_callback=self.open_plugin
         self.proxy=ProxyPanel(self,label,button,card); layout.addWidget(self.proxy); self.proxy.hide()
         self.serial_tool=SerialPanel(self,label,button,card); layout.addWidget(self.serial_tool); self.serial_tool.hide()
+        self.rgb_tool=RgbPanel(self,label,button,card); layout.addWidget(self.rgb_tool); self.rgb_tool.hide()
         layout.addStretch()
 
     def open_serial(self):
-        self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
+        self.proxy.hide(); self.rgb_tool.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.serial_tool.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('串口助手'); self.subtitle.setText('UART3 · 串口收发、波形与引脚配置。'); self.serial_tool.refresh()
 
+    def open_rgb(self):
+        self.serial_tool.hide(); self.proxy.hide(); self.plugin_detail.hide(); self.plugin_center.hide(); self.rgb_tool.show()
+        self.stack.widget(4).verticalScrollBar().setValue(0); self.title.setText('RGB 灯控制'); self.subtitle.setText('板载 RGB · 颜色预设与独立通道控制。'); self.rgb_tool.refresh()
+
     def open_proxy(self):
         self.serial_tool.hide()
+        self.rgb_tool.hide()
         self.plugin_detail.hide(); self.plugin_center.hide(); self.proxy.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
         self.title.setText('网络代理'); self.subtitle.setText('Mihomo · 配置、模式与节点管理。')
@@ -377,6 +384,7 @@ class Window(QMainWindow):
 
     def open_plugin(self):
         self.serial_tool.hide()
+        self.rgb_tool.hide()
         self.proxy.hide()
         self.plugin_center.hide(); self.plugin_detail.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -395,6 +403,7 @@ class Window(QMainWindow):
 
     def close_plugin(self):
         self.serial_tool.hide()
+        self.rgb_tool.hide()
         self.proxy.hide()
         self.plugin_detail.hide(); self.plugin_center.show()
         self.stack.widget(4).verticalScrollBar().setValue(0)
@@ -613,6 +622,7 @@ class Window(QMainWindow):
 
     def reset_data(self):
         self.serial_tool.reset(); self.serial_tool.hide()
+        self.rgb_tool.reset(); self.rgb_tool.hide()
         self.proxy.reset(); self.proxy.hide()
         self.traffic.reset()
         self.plugin_center.render({'state':'unknown' if self.serial else 'offline'})
@@ -945,7 +955,7 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==7
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==8 and hasattr(window,'rgb_tool')
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             from serial_assistant import ASSETS as SERIAL_ASSETS

@@ -1,4 +1,0 @@
-#!/bin/sh
-# TSPI_MANAGER_MONITOR_V1
-export LC_ALL=C LANG=C
-exec perl /userdata/bin/traffic_sampler.pl

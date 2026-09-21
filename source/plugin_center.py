@@ -47,7 +47,7 @@ class PluginCenter(QWidget):
             row.addWidget(open_btn); box.addLayout(row)
             if key=='traffic': self.traffic_badge=badge; self.traffic_open=open_btn
             if key=='proxy': self.proxy_badge=badge
-            if key=='ld06': self.ld06_badge=badge; open_btn.setText('下载 / 安装 / 打开')
+            if key=='ld06': self.ld06_badge=badge
             self.cards.append({'key':key,'name':title,'description':description,'category':category,'widget':frame})
         self.empty=label('没有找到匹配的插件。试试其他关键词或分类。','subtle',True); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setMinimumHeight(100); layout.addWidget(self.empty)
         footer=label('本地插件目录 · 当前提供 3 款可安装插件，其余为内置工具快捷入口。','caption',True); layout.addWidget(footer)

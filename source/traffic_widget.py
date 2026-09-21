@@ -199,7 +199,7 @@ class TrafficPanel(QFrame):
         host=self.host.text().strip() if self.mode.currentIndex()==1 else ''
         if self.mode.currentIndex()==1 and not host: self.result.setText('请填写运行 iperf3 的服务器地址。'); return
         selected_node=self.public_node.currentData() if public else None
-        message=('将由泰山派连接苏州、昆山、东京 IPA CyberLab 和首尔 Kdatacenter 公网测速节点，先按延迟排序，再依次尝试。\n单节点最多下载 16 MiB、上传 4 MiB；节点失败会自动尝试下一个，结果只来自同一个成功节点。\n测试期间会占用带宽。公网节点可能受跨境链路、运营商策略和节点负载影响。' if public else '测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。'))
+        message=('将由泰山派连接苏州、昆山、东京 IPA CyberLab、首尔 Kdatacenter 和洛杉矶 UP 自建 公网测速节点，先按延迟排序，再依次尝试。\n单节点最多下载 16 MiB、上传 4 MiB；节点失败会自动尝试下一个，结果只来自同一个成功节点。\n测试期间会占用带宽。公网节点可能受跨境链路、运营商策略和节点负载影响。' if public else '测速将占用所选网卡带宽并产生流量（不设流量上限），上传和下载各 5 秒。\n'+('目标：'+host if host else '测试泰山派与本电脑之间的局域网速度，泰山派会临时开启测速端口，测试结束自动关闭。'))
         if public and selected_node is not None:
             message='将由泰山派测试所选节点：'+NODES[selected_node][0]+'。\n最多下载 16 MiB、上传 4 MiB；失败后不会切换其他节点。测试期间会占用带宽。'
         if not self.owner.ask('开始公网测速' if public else '开始网速测试',message): return

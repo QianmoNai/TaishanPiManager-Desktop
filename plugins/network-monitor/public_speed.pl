@@ -11,6 +11,7 @@ my @nodes=(
  ['Kunshan','speedtest.dukekunshan.edu.cn',8080],
  ['Tokyo IPA CyberLab','speed.udx.icscoe.jp',8080],
  ['Seoul Kdatacenter','speedtest.kdatacenter.com',8080],
+ ['Los Angeles UP','192.161.162.155',8080],
 );
 my ($mode,$ip,$index)=@ARGV;
 die "Invalid source IPv4\n" unless defined($ip) && $ip =~ /^\d+\.\d+\.\d+\.\d+$/;

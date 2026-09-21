@@ -13,7 +13,8 @@ from monitor_plugin import ASSETS
 NODES=(('苏州 · JSQY','speedtest.jsqiuying.com',8080),
        ('昆山 · 昆山杜克大学','speedtest.dukekunshan.edu.cn',8080),
        ('东京 · IPA CyberLab','speed.udx.icscoe.jp',8080),
-       ('首尔 · Kdatacenter','speedtest.kdatacenter.com',8080))
+       ('首尔 · Kdatacenter','speedtest.kdatacenter.com',8080),
+       ('洛杉矶 · UP自建测速节点','192.161.162.155',8080))
 
 
 def parse_result(raw):

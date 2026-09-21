@@ -1,0 +1,16 @@
+[Unit]
+Description=TaishanPi UP speed test endpoint
+After=network.target
+[Service]
+DynamicUser=yes
+ExecStart=/usr/bin/python3 /opt/tspi-speedtest/server.py
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+MemoryMax=128M
+TasksMax=32
+LimitNOFILE=128
+[Install]
+WantedBy=multi-user.target

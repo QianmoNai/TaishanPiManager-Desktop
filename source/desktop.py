@@ -207,7 +207,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.33','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.35','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -974,7 +974,8 @@ def main():
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             from serial_assistant import ASSETS as SERIAL_ASSETS
-            ok = ok and (SERIAL_ASSETS/'serial-helper.pl').is_file() and hasattr(window,'serial_tool')
+            from pin_widget import PINOUT_IMAGE
+            ok = ok and (SERIAL_ASSETS/'serial-helper.pl').is_file() and hasattr(window,'serial_tool') and PINOUT_IMAGE.is_file()
             previous = app.property('theme')
             for theme in ('dark', 'light'):
                 apply_theme(app, theme)

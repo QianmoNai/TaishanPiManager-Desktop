@@ -1,6 +1,12 @@
 """Responsive native Qt panel for GPIO/I2C/SPI/PWM."""
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QSpinBox, QCheckBox, QPlainTextEdit, QSizePolicy
+from pathlib import Path
+import sys
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QSpinBox, QCheckBox, QPlainTextEdit, QSizePolicy, QLabel
+
+
+PINOUT_IMAGE = (Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent) / "pinout-taishanpi.png"
 
 
 class PinPanel(QWidget):
@@ -35,8 +41,28 @@ class PinPanel(QWidget):
         for widget in (self.pwm_chip, self.pwm_channel, self.pwm_period, self.pwm_duty, self.pwm_enable, self.pwm_btn, self.pwm_apply_btn): self._controls.append(widget)
         grid.addWidget(label('芯片', 'caption'), 0, 0); grid.addWidget(self.pwm_chip, 0, 1); grid.addWidget(label('通道', 'caption'), 0, 2); grid.addWidget(self.pwm_channel, 0, 3); grid.addWidget(label('周期', 'caption'), 1, 0); grid.addWidget(self.pwm_period, 1, 1); grid.addWidget(label('占空比', 'caption'), 1, 2); grid.addWidget(self.pwm_duty, 1, 3); grid.addWidget(self.pwm_enable, 1, 4); grid.addWidget(self.pwm_btn, 0, 5); grid.addWidget(self.pwm_apply_btn, 1, 5); box.addLayout(grid); box.addWidget(self.pwm_result); root.addWidget(frame)
 
-        frame, box = card(); box.addWidget(label('引脚复用与资源摘要', 'section')); self.pinmux_output = self.console('读取设备后显示 pinmux-pins 摘要。'); self.pinmux_output.setMinimumHeight(170); box.addWidget(self.pinmux_output); box.addWidget(label('需要修改设备树或固定引脚复用时，请导出配置后在 WSL 的泰山派 SDK 中手动编译；本工具不会在线修改固件。', 'caption', True)); root.addWidget(frame); root.addStretch()
+        frame, box = card(); box.addWidget(label('泰山派 40 针排针引脚图', 'section'))
+        self.pinout_image = QLabel(); self.pinout_image.setAlignment(Qt.AlignmentFlag.AlignCenter); self.pinout_image.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred); self.pinout_image.setMinimumHeight(250)
+        self.pinout_pixmap = QPixmap(str(PINOUT_IMAGE))
+        if self.pinout_pixmap.isNull():
+            self.pinout_image.setText('引脚图资源未找到')
+        else:
+            self.pinout_image.setToolTip('泰山派 40 针排针：供电、GPIO、I2C、SPI、PWM、UART3 等复用信息')
+            QTimer.singleShot(0, self._scale_pinout)
+        box.addWidget(self.pinout_image)
+        box.addWidget(label('图中标注了 3.3V、5V、GND、GPIO、I2C、SPI、PWM 和 UART3 等复用信息。UART3_M1 对应物理 8 脚 TX、10 脚 RX。需要修改设备树或固定引脚复用时，请导出配置后在 WSL 的泰山派 SDK 中手动编译；本工具不会在线修改固件。', 'caption', True)); root.addWidget(frame); root.addStretch()
         self._controls += [self.refresh_btn, self.gpio_number, self.gpio_action, self.gpio_value, self.gpio_btn, self.i2c_bus, self.i2c_scan_btn]
+
+    def _scale_pinout(self):
+        if self.pinout_pixmap.isNull(): return
+        width = max(220, self.pinout_image.width() - 8)
+        scaled = self.pinout_pixmap.scaled(width, 1200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.pinout_image.setPixmap(scaled)
+        self.pinout_image.setMinimumHeight(scaled.height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'pinout_image'): self._scale_pinout()
 
     def console(self, placeholder):
         edit = QPlainTextEdit(); edit.setReadOnly(True); edit.setPlaceholderText(placeholder); edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap); return edit
@@ -64,8 +90,6 @@ class PinPanel(QWidget):
         self.pwm_chip.blockSignals(False)
         spi = data.get('spi') or []
         self.spi_output.setText('SPI 设备：' + ('、'.join(spi) if spi else '未发现 /dev/spidev*'))
-        pinmux = data.get('pinmux') or ['未发现可读的 pinmux-pins；请确认 debugfs 已挂载。']
-        self.pinmux_output.setPlainText('\n'.join(pinmux[:500]))
         self.state.setText(f'已读取 · GPIO 芯片 {len(data.get("gpiochips", []))} · I2C {len(buses)} · SPI {len(spi)} · PWM {len(chips)}')
 
     def run_gpio(self):
@@ -98,4 +122,4 @@ class PinPanel(QWidget):
         self.pwm_result.setText(f'{data.get("chip")} 通道 {data.get("channel")} · 周期 {data.get("period")} ns · 占空比 {data.get("duty")} ns · '+('启用' if str(data.get('enable')) == '1' else '停用'))
 
     def reset(self):
-        self.generation += 1; self.state.setText('未读取硬件资源'); self.model.setText('连接泰山派后读取 GPIO、I2C、SPI、PWM 节点。'); self.gpio_result.setText('尚未读取 GPIO 状态。'); self.i2c_output.clear(); self.spi_output.setText('SPI 设备：尚未读取'); self.pinmux_output.clear(); self.pwm_result.setText('尚未读取 PWM 状态。')
+        self.generation += 1; self.state.setText('未读取硬件资源'); self.model.setText('连接泰山派后读取 GPIO、I2C、SPI、PWM 节点。'); self.gpio_result.setText('尚未读取 GPIO 状态。'); self.i2c_output.clear(); self.spi_output.setText('SPI 设备：尚未读取'); self.pwm_result.setText('尚未读取 PWM 状态。')

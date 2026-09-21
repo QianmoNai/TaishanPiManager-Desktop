@@ -3,9 +3,14 @@ from unittest.mock import Mock
 
 from adb_core import UserError
 from pin_assistant import gpio, i2c_scan, inventory, pwm
+from pin_widget import PINOUT_IMAGE
 
 
 class PinAssistantTests(unittest.TestCase):
+    def test_pinout_image_is_bundled_source_asset(self):
+        self.assertTrue(PINOUT_IMAGE.is_file())
+        self.assertGreater(PINOUT_IMAGE.stat().st_size, 10000)
+
     def test_gpio_rejects_invalid_number_and_action(self):
         with self.assertRaises(UserError): gpio(Mock(), 'board', -1)
         with self.assertRaises(UserError): gpio(Mock(), 'board', '1;reboot')

@@ -207,7 +207,7 @@ class Window(QMainWindow):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.39','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.40','caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -222,7 +222,7 @@ class Window(QMainWindow):
         self.stack=QStackedWidget(); outer.addWidget(self.stack,1)
         self.build_overview(); self.build_files(); self.build_logs(); self.build_terminal(); self.build_services(); self.build_wifi()
         footer=QHBoxLayout(); self.activity=label('就绪','caption'); footer.addWidget(self.activity); footer.addStretch(); footer.addWidget(label('设备数据直连 · 不使用浏览器','caption')); outer.addLayout(footer)
-        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password,self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn,self.wifi_local]
+        self.guarded=[self.device_select,self.refresh_btn,self.connect_btn,self.open_btn,self.up_btn,self.upload_btn,self.download_btn,self.log_btn,self.reboot_btn,*self.service_buttons,self.wifi_iface,self.wifi_scan_btn,self.wifi_status_btn,self.wifi_connect_btn,self.wifi_table,self.wifi_password,self.wifi_show_password,self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn,self.wifi_local,self.wifi_local_connect_btn]
         self.guarded.extend([self.install_monitor_btn,self.monitor_autostart,self.plugin_center.refresh,self.plugin_primary,self.uninstall_monitor_btn,*self.pin_tool.controls()])
         # Proxy handlers guard busy operations without disabling the focused card.
         # Disabling focused controls makes QScrollArea jump to another focus target.
@@ -461,22 +461,42 @@ class Window(QMainWindow):
         localrow=QHBoxLayout()
         self.wifi_local=QComboBox(); self.wifi_local.setMinimumWidth(180)
         localrow.addWidget(self.wifi_local,1)
+        self.wifi_local_connect_btn=button('连接已保存 Wi-Fi',self.connect_local_wifi,'primary')
+        localrow.addWidget(self.wifi_local_connect_btn)
+        box.addLayout(localrow)
+        localrow=QHBoxLayout()
         self.wifi_save_btn=button('保存到本地',self.save_local_wifi)
         self.wifi_delete_btn=button('删除本地配置',self.delete_local_wifi)
         self.wifi_sync_btn=button('全部同步到泰山派',self.sync_local_wifi,'primary')
         for btn in (self.wifi_save_btn,self.wifi_delete_btn,self.wifi_sync_btn): localrow.addWidget(btn)
         box.addLayout(localrow)
-        box.addWidget(label('本地 Wi-Fi 配置跨软件版本保留；删除本地配置不会删除板端网络。','caption',True))
+        box.addWidget(label('选择已保存的 Wi-Fi 后可直接连接，无需扫描或重新输入密码。删除本地配置不会删除板端网络。','caption',True))
         self.reload_local_wifi()
         box.addWidget(label('连接成功后会保存到泰山派的 wpa_supplicant 配置，重新上电将自动连接。','caption',True)); layout.addWidget(frame); layout.addStretch()
 
+    def connect_local_wifi(self):
+        if not self.require_device() or self.busy: return
+        from wifi_profiles import ProfileStore
+        ssid=self.wifi_local.currentData()
+        if not ssid: self.notify('请先保存或选择一个本地 Wi-Fi 配置。',True); return
+        try:
+            profile=next((row for row in ProfileStore().read() if row['ssid_hex']==ssid),None)
+            if profile is None:
+                self.reload_local_wifi(); self.notify('该本地配置已不存在，请重新选择。',True); return
+            network={**profile,'ssid':bytes.fromhex(ssid).decode('utf-8','replace')}
+            self.start_wifi_connection(network,self.wifi_iface.currentData() or '',profile['password'])
+        except Exception as exc: self.notify(str(exc),True)
+
     def reload_local_wifi(self):
         from wifi_profiles import ProfileStore
+        selected=self.wifi_local.currentData()
         self.wifi_local.clear()
         try:
             for row in ProfileStore().summaries():
                 self.wifi_local.addItem(bytes.fromhex(row['ssid_hex']).decode('utf-8','replace'),row['ssid_hex'])
             if not self.wifi_local.count(): self.wifi_local.addItem('尚无本地配置','')
+            index=self.wifi_local.findData(selected)
+            if index>=0: self.wifi_local.setCurrentIndex(index)
         except Exception:
             self.wifi_local.addItem('本地配置读取失败','')
 
@@ -585,12 +605,15 @@ class Window(QMainWindow):
         if not network['ssid_hex'] or network['security'] not in ('psk','open'):
             self.notify('暂不支持隐藏网络、企业认证或纯 WPA3 网络，请选择 WPA/WPA2 个人网络或开放网络。',True); return
         if network['security']=='psk' and not self.wifi_password.text(): self.notify('请输入 Wi-Fi 密码。',True); self.wifi_password.setFocus(); return
+        self.start_wifi_connection(network,self.wifi_scan_iface,self.wifi_password.text())
+
+    def start_wifi_connection(self,network,interface,password):
         transport=next((d['transport'] for d in self.devices if d['serial']==self.serial),'')
         warnings=[]
         if transport=='网络' or ':' in self.serial: warnings.append('当前使用网络 ADB，切换 Wi-Fi 可能立即断开管理连接。建议通过 USB 操作。')
         if network['security']=='open': warnings.append('这是不加密的开放网络。')
         if warnings and not self.ask('连接 Wi-Fi', '\n'.join(warnings)+'\n连接到：'+network['ssid']): return
-        data={'interface':self.wifi_scan_iface,'ssid_hex':network['ssid_hex'],'security':network['security'],'password':self.wifi_password.text()}
+        data={'interface':interface,'ssid_hex':network['ssid_hex'],'security':network['security'],'password':password}
         self.wifi_password.clear(); self.wifi_show_password.setChecked(False); self.wifi_status.setText('正在连接 '+network['ssid']+'，请等待认证和地址分配…')
         def operation():
             try:

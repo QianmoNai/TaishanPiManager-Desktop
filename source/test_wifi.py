@@ -148,6 +148,32 @@ class WifiUiTests(unittest.TestCase):
         self.assertIn('192.0.2.10',self.window.wifi_status.text())
         self.assertIsNone(self.window.job.fn)
 
+    def test_saved_wifi_connects_without_scan_and_keeps_selection(self):
+        from wifi_profiles import ProfileStore
+        self.connect_fake()
+        for ssid in ('First','Second'):
+            ProfileStore().save({'ssid_hex':ssid.encode().hex(),'security':'psk','password':'saved-password'})
+        self.window.reload_local_wifi(); self.window.wifi_local.setCurrentIndex(1)
+        self.assertEqual(self.window.wifi_table.rowCount(),0)
+        captured=[]
+        def dispatch(path,data):
+            self.assertEqual(path,'/api/wifi-connect')
+            self.assertEqual(data['ssid_hex'],b'Second'.hex())
+            self.assertEqual(data['password'],'saved-password')
+            captured.append(data)
+            return {**STATE,'message':'已连接 Wi-Fi'}
+        with patch.object(self.api,'dispatch',side_effect=dispatch):
+            self.window.connect_local_wifi(); self.wait_idle()
+        self.assertEqual(self.window.wifi_password.text(),'')
+        self.assertIsNone(self.window.job.fn)
+        self.assertEqual(self.window.wifi_local.currentText(),'Second')
+
+    def test_saved_wifi_empty_does_not_connect(self):
+        self.connect_fake()
+        with patch.object(self.api,'dispatch') as dispatch:
+            self.window.connect_local_wifi(); dispatch.assert_not_called()
+        self.assertIn('保存或选择',self.window.banner.text())
+
     def test_wifi_open_network_cancel_does_not_connect(self):
         self.wifi_ready(); self.window.wifi_table.selectRow(2)
         with patch.object(self.window,'ask',return_value=False), patch.object(self.api,'dispatch') as dispatch:

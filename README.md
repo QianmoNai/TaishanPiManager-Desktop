@@ -1,7 +1,7 @@
 # 泰山派设备管理 · TaishanPi Manager Desktop
 
 <p align="center">
-  <img src="界面预览.png" alt="泰山派设备管理界面预览" width="860">
+  <img src="docs/assets/界面预览.png" alt="泰山派设备管理界面预览" width="860">
 </p>
 
 <p align="center">
@@ -40,19 +40,19 @@
 
 ### 设备概览
 
-![设备概览](界面预览.png)
+![设备概览](docs/assets/界面预览.png)
 
 ### 插件中心
 
-![插件中心（浅色）](插件中心实机-light.png)
+![插件中心（浅色）](docs/assets/插件中心实机-light.png)
 
-![插件中心（深色）](插件中心实机-dark.png)
+![插件中心（深色）](docs/assets/插件中心实机-dark.png)
 
 ### 网络与终端
 
 <p>
-  <img src="网络流量实机-light.png" alt="网络流量" width="49%">
-  <img src="终端实机预览.png" alt="交互终端" width="49%">
+  <img src="docs/assets/网络流量实机-light.png" alt="网络流量" width="49%">
+  <img src="docs/assets/终端实机预览.png" alt="交互终端" width="49%">
 </p>
 
 ## 快速开始
@@ -89,6 +89,9 @@ python source\desktop.py
 ## 项目结构
 
 ```text
+docs/                使用说明、验证记录和项目资料
+docs/assets/         README 截图与测试图片
+docs/evidence/       测试数据、校验文件和实测结果
 source/              PySide6 桌面端源码与测试
 plugins/             随应用分发的板端插件
 adb/                 Windows ADB 运行文件
@@ -101,16 +104,16 @@ dist/                构建产物
 
 ## 版本历史
 
-项目保留了从 `v1.0` 到 `v2.48` 的完整 Git 提交历史和版本标签。查看具体改动可进入 [Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags)，每个版本的验证记录位于仓库根目录的 `v2.xx验证记录.md`。
+项目保留了从 `v1.0` 到 `v2.48` 的完整 Git 提交历史和版本标签。查看具体改动可进入 [Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags)，每个版本的验证记录位于`docs/` 下的版本验证记录。
 
 当前版本 `v2.48` 新增 UP 自建测速节点支持，板端可以使用配置的 HTTP 测速服务进行公网测速。
 
 ## 文档
 
-- [使用说明](使用说明.md)
-- [网络代理使用说明](网络代理使用说明.md)
-- [第三方组件说明](第三方组件说明.md)
-- [验证记录](验证记录.md)
+- [使用说明](docs/使用说明.md)
+- [网络代理使用说明](docs/网络代理使用说明.md)
+- [第三方组件说明](docs/第三方组件说明.md)
+- [验证记录](docs/验证记录.md)
 
 ## 开发与验证
 
@@ -133,4 +136,5 @@ python -m unittest discover -s source -p "test_*.py"
 
 ## 许可证
 
-项目中包含的第三方组件分别遵循其原始许可证，详见 [`licenses/`](licenses/) 和 [第三方组件说明](第三方组件说明.md)。
+项目中包含的第三方组件分别遵循其原始许可证，详见 [`licenses/`](licenses/) 和 [第三方组件说明](docs/第三方组件说明.md)。
+

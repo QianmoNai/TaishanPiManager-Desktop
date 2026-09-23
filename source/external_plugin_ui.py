@@ -1,7 +1,8 @@
 import json
 from PySide6.QtCore import QStandardPaths, Qt, QTimer
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-                             QPushButton, QPlainTextEdit, QFileDialog, QMessageBox, QDialogButtonBox)
+from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
+                             QPushButton, QPlainTextEdit, QFileDialog, QMessageBox, QDialogButtonBox,
+                             QScrollArea, QFrame, QSizePolicy)
 from external_plugins import PluginStore, read_package
 
 
@@ -127,22 +128,39 @@ class ExternalPlugins:
     def open_page(self, path, manifest, scripts):
         page = manifest['page']
         dialog = QDialog(self.center)
+        dialog.setObjectName('externalPluginPage')
         dialog.setWindowTitle(page['title'] + ' · ' + manifest['name'])
-        dialog.resize(760, 560)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel('第三方页面 · 后台任务只在页面打开时运行；关闭页面即停止轮询。'))
+        dialog.resize(1080, 780)
+        outer = QVBoxLayout(dialog); outer.setContentsMargins(0, 0, 0, 0)
+        area = QScrollArea(); area.setWidgetResizable(True); area.setFrameShape(QFrame.Shape.NoFrame)
+        page_widget = QWidget(); page_widget.setObjectName('page'); layout = QVBoxLayout(page_widget)
+        layout.setContentsMargins(22, 22, 27, 22); layout.setSpacing(16)
+        hero, hero_box = self.card()
+        hero.setObjectName('hero')
+        header = QHBoxLayout(); text = QVBoxLayout(); text.setSpacing(4)
+        text.addWidget(self.label('THIRD-PARTY  /  PLUGIN', 'eyebrow'))
+        text.addWidget(self.label(page['title'], 'heroTitle'))
+        text.addWidget(self.label(manifest['description'], 'heroSub', True))
+        header.addLayout(text, 1)
+        status = self.label('后台任务未启动', 'heroCaption'); header.addWidget(status, 0, Qt.AlignmentFlag.AlignTop)
+        hero_box.addLayout(header); layout.addWidget(hero)
         cards = {}
         grid = QGridLayout()
+        grid.setSpacing(14)
         for index, spec in enumerate(page.get('cards', [])):
-            card = QDialog(self.center)
-            card.setObjectName('pluginStatusCard')
-            card_layout = QVBoxLayout(card)
-            title = QLabel(spec['title']); value = QLabel('—'); value.setObjectName('pluginStatusValue')
+            card, card_layout = self.card()
+            title = self.label(spec['title'], 'subtle'); value = self.label('—', 'metricValue')
+            value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             card_layout.addWidget(title); card_layout.addWidget(value)
             grid.addWidget(card, index // 3, index % 3)
             cards[spec['id']] = value
         layout.addLayout(grid)
-        output = QPlainTextEdit(); output.setReadOnly(True); output.setMaximumBlockCount(500); layout.addWidget(output, 1)
+        actions_card, actions_box = self.card(); actions_box.addWidget(self.label('插件操作', 'section'))
+        actions_hint = self.label('操作由插件作者提供，执行前会遵循当前插件的信任设置。', 'caption', True); actions_box.addWidget(actions_hint)
+        action_row = QHBoxLayout(); actions_box.addLayout(action_row); layout.addWidget(actions_card)
+        output_card, output_box = self.card(); output_box.addWidget(self.label('最近输出', 'section'))
+        output = QPlainTextEdit(); output.setObjectName('console'); output.setReadOnly(True); output.setMaximumBlockCount(500); output.setMinimumHeight(120); output_box.addWidget(output); layout.addWidget(output_card)
+        area.setWidget(page_widget); outer.addWidget(area)
 
         def run_script(script, finished, label):
             if self.owner.busy or not self.owner.require_device(): return
@@ -166,7 +184,7 @@ class ExternalPlugins:
                 for key, widget in cards.items():
                     value = values.get(key, '—')
                     widget.setText(str(value)[:200])
-                output.setPlainText('最近更新：设备 ' + serial)
+                status.setText('● 已连接 · ' + serial); output.setPlainText('最近更新：设备 ' + serial)
             except Exception as exc:
                 output.setPlainText('轮询结果无效：' + str(exc))
 
@@ -176,14 +194,14 @@ class ExternalPlugins:
             timer.setInterval(poll['interval_ms'])
             timer.timeout.connect(lambda:run_script(scripts[poll['script']], poll_done, '正在读取第三方插件状态…'))
             if self.owner.serial:
-                timer.start(); QTimer.singleShot(0, timer.timeout.emit)
+                status.setText('正在连接 · ' + self.owner.serial); timer.start(); QTimer.singleShot(0, timer.timeout.emit)
         for action in manifest['actions']:
-            button = QPushButton(action['title'])
+            button = self.button(action['title'], None, 'primary')
             def execute(checked=False, action=action):
                 if not self.owner.require_device(): return
                 if not self.store.is_trusted(manifest['id']) and not self.owner.ask('执行第三方插件操作', '脚本将在当前设备上运行，可能拥有 root 权限。继续？'): return
                 run_script(scripts[action['script']], lambda serial,result: output.setPlainText(
                     '设备：' + serial + '\n退出码：' + str(result[2]) + '\n' + result[0].decode('utf-8','replace')[-65536:] + '\n' + result[1]), '正在执行第三方插件操作…')
-            button.clicked.connect(execute); layout.addWidget(button)
+            button.clicked.connect(execute); action_row.addWidget(button)
         dialog.finished.connect(timer.stop)
         dialog.exec()

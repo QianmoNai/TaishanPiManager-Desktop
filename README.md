@@ -1,7 +1,7 @@
 # 泰山派设备管理 · TaishanPi Manager Desktop
 
 <p align="center">
-  <img src="docs/assets/界面预览.png" alt="泰山派设备管理界面预览" width="860">
+  <img src="docs/promo/pictures/设备概览.png" alt="泰山派设备管理界面预览" width="860">
 </p>
 
 <p align="center">
@@ -9,11 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases"><img src="https://img.shields.io/badge/version-v2.48-2563eb?style=flat-square" alt="Version"></a>
-  <a href="https://gitee.com/qianmonai/TaishanPiManager-Desktop"><img src="https://img.shields.io/badge/platform-Windows-2563eb?style=flat-square" alt="Platform"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
-  <a href="https://www.qt.io/qt-for-python"><img src="https://img.shields.io/badge/UI-PySide6-41CD52?style=flat-square" alt="PySide6"></a>
-  <a href="https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags"><img src="https://img.shields.io/badge/history-v1.0--v2.48-64748b?style=flat-square" alt="Version history"></a>
+  Windows · Python · PySide6 · USB / 网络 ADB
 </p>
 
 ## 项目简介
@@ -38,22 +34,45 @@
 
 ## 界面预览
 
-### 设备概览
-
-![设备概览](docs/assets/界面预览.png)
-
 ### 插件中心
 
-![插件中心（浅色）](docs/assets/插件中心实机-light.png)
+![插件中心（一）](docs/promo/pictures/插件中心1.png)
 
-![插件中心（深色）](docs/assets/插件中心实机-dark.png)
+![插件中心（二）](docs/promo/pictures/插件中心2.png)
 
-### 网络与终端
+### 网络与设备管理
 
-<p>
-  <img src="docs/assets/网络流量实机-light.png" alt="网络流量" width="49%">
-  <img src="docs/assets/终端实机预览.png" alt="交互终端" width="49%">
-</p>
+![网络设置](docs/promo/pictures/网络设置.png)
+
+![网络流量插件](docs/promo/pictures/网络流量插件.png)
+
+<details>
+<summary>查看更多：文件管理、系统日志与终端</summary>
+
+![文件管理](docs/promo/pictures/文件管理.png)
+
+![系统日志](docs/promo/pictures/系统日志.png)
+
+![终端](docs/promo/pictures/终端.png)
+
+</details>
+
+### 硬件插件
+
+![引脚助手](docs/promo/pictures/引脚助手插件.png)
+
+<details>
+<summary>查看更多：串口、摄像头、LD06 雷达与 RGB 灯控制</summary>
+
+![串口助手](docs/promo/pictures/串口助手插件.png)
+
+![摄像头助手](docs/promo/pictures/摄像头助手插件.png)
+
+![LD06 雷达](docs/promo/pictures/LD06雷达插件.png)
+
+![RGB 灯控制](docs/promo/pictures/RGB灯控制插件.png)
+
+</details>
 
 ## 快速开始
 

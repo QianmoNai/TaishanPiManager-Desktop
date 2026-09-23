@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "com.taishanpi.import-action-test",
+  "name": "插件导入基础测试",
+  "version": "1.0.0",
+  "author": "TaishanPi Manager",
+  "description": "只读测试插件：验证最基础的第三方插件包导入和操作执行。",
+  "actions": [
+    {"title": "查询设备信息", "script": "scripts/info.sh"}
+  ]
+}

@@ -17,13 +17,17 @@ class ExternalPlugins:
         if not path:
             return
         try:
-            manifest, _ = read_package(path)
+            from pathlib import Path
+            source = Path(path)
+            if not source.is_file():
+                raise FileNotFoundError(f'选择的插件包不存在：{source}')
+            manifest, _ = read_package(source)
             if not self.owner.ask('导入第三方插件', f"{manifest['name']} · {manifest['version']}\n作者（自述）：{manifest['author']}\nID：{manifest['id']}\n\n仅保存到电脑，不会自动执行。插件未经签名认证，运行时可能拥有设备 root 权限。是否导入？"):
                 return
-            self.store.install(path)
+            self.store.install(source)
             self.reload()
         except Exception as exc:
-            QMessageBox.warning(self.center, '导入失败', str(exc))
+            QMessageBox.warning(self.center, '导入失败', f'{type(exc).__name__}: {exc}')
 
     def reload(self):
         for entry in self.center.cards[:]:

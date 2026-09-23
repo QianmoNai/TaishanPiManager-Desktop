@@ -86,6 +86,24 @@ def read_package(path):
 class PluginStore:
     def __init__(self, root):
         self.root = Path(root)
+        self.trust_file = self.root / 'trusted.json'
+
+    def trusted_ids(self):
+        try:
+            data = json.loads(self.trust_file.read_text(encoding='utf-8'))
+            return set(data) if isinstance(data, list) and all(isinstance(x, str) for x in data) else set()
+        except (OSError, ValueError):
+            return set()
+
+    def is_trusted(self, plugin_id):
+        return plugin_id in self.trusted_ids()
+
+    def set_trusted(self, plugin_id, trusted=True):
+        ids = self.trusted_ids()
+        if trusted: ids.add(plugin_id)
+        else: ids.discard(plugin_id)
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.trust_file.write_text(json.dumps(sorted(ids), ensure_ascii=False, indent=2), encoding='utf-8')
 
     def packages(self):
         result = []
@@ -128,3 +146,8 @@ class PluginStore:
         archive.mkdir(exist_ok=True)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         os.replace(path, archive / (path.stem + '-' + digest + '.zip'))
+        try:
+            manifest, _ = read_package(archive / (path.stem + '-' + digest + '.zip'))
+            self.set_trusted(manifest['id'], False)
+        except Exception:
+            pass

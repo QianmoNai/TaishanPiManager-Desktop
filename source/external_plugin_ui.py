@@ -22,9 +22,10 @@ class ExternalPlugins:
             if not source.is_file():
                 raise FileNotFoundError(f'选择的插件包不存在：{source}')
             manifest, _ = read_package(source)
-            if not self.owner.ask('导入第三方插件', f"{manifest['name']} · {manifest['version']}\n作者（自述）：{manifest['author']}\nID：{manifest['id']}\n\n仅保存到电脑，不会自动执行。插件未经签名认证，运行时可能拥有设备 root 权限。是否导入？"):
+            if not self.owner.ask('信任并导入第三方插件', f"{manifest['name']} · {manifest['version']}\n作者（自述）：{manifest['author']}\nID：{manifest['id']}\n\n信任后，该插件的操作将不再逐次确认，并可能以当前 ADB 权限（通常是 root）修改设备。只信任你审查过来源和脚本的插件。是否信任并导入？"):
                 return
             self.store.install(source)
+            self.store.set_trusted(manifest['id'], True)
             self.reload()
         except Exception as exc:
             QMessageBox.warning(self.center, '导入失败', f'{type(exc).__name__}: {exc}')
@@ -84,26 +85,27 @@ class ExternalPlugins:
                 return
             serial = self.owner.serial
             script = scripts[action['script']]
-            confirm = QDialog(dialog)
-            confirm.setWindowTitle('确认在设备上执行脚本')
-            confirm.resize(700, 500)
-            content = QVBoxLayout(confirm)
-            target = QLabel('目标设备：' + serial + '\n操作：' + action['title'])
-            target.setTextFormat(Qt.TextFormat.PlainText)
-            content.addWidget(target)
-            preview = QPlainTextEdit()
-            preview.setReadOnly(True)
-            preview.setPlainText(script)
-            content.addWidget(preview)
-            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-            buttons.accepted.connect(confirm.accept)
-            buttons.rejected.connect(confirm.reject)
-            content.addWidget(buttons)
-            if confirm.exec() != QDialog.DialogCode.Accepted:
-                return
+            if not self.store.is_trusted(manifest['id']):
+                confirm = QDialog(dialog)
+                confirm.setWindowTitle('确认在设备上执行脚本')
+                confirm.resize(700, 500)
+                content = QVBoxLayout(confirm)
+                target = QLabel('目标设备：' + serial + '\n操作：' + action['title'])
+                target.setTextFormat(Qt.TextFormat.PlainText)
+                content.addWidget(target)
+                preview = QPlainTextEdit()
+                preview.setReadOnly(True)
+                preview.setPlainText(script)
+                content.addWidget(preview)
+                buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+                buttons.accepted.connect(confirm.accept)
+                buttons.rejected.connect(confirm.reject)
+                content.addWidget(buttons)
+                if confirm.exec() != QDialog.DialogCode.Accepted:
+                    return
             if self.owner.busy or serial != self.owner.serial:
                 return
-            output.setPlainText('执行中 · ' + serial)
+            output.setPlainText(('已信任插件 · ' if self.store.is_trusted(manifest['id']) else '执行中 · ') + serial)
             def done(result):
                 data, error, code = result
                 output.setPlainText(f'设备：{serial}\n退出码：{code}\n' + data.decode('utf-8', 'replace')[-65536:] + '\n' + error)
@@ -179,7 +181,7 @@ class ExternalPlugins:
             button = QPushButton(action['title'])
             def execute(checked=False, action=action):
                 if not self.owner.require_device(): return
-                if not self.owner.ask('执行第三方插件操作', '脚本将在当前设备上运行，可能拥有 root 权限。继续？'): return
+                if not self.store.is_trusted(manifest['id']) and not self.owner.ask('执行第三方插件操作', '脚本将在当前设备上运行，可能拥有 root 权限。继续？'): return
                 run_script(scripts[action['script']], lambda serial,result: output.setPlainText(
                     '设备：' + serial + '\n退出码：' + str(result[2]) + '\n' + result[0].decode('utf-8','replace')[-65536:] + '\n' + result[1]), '正在执行第三方插件操作…')
             button.clicked.connect(execute); layout.addWidget(button)

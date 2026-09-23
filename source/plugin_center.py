@@ -1,6 +1,7 @@
 """Native plugin catalog; every entry maps to a real bundled capability."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QButtonGroup
+from external_plugin_ui import ExternalPlugins
 
 
 class PluginCenter(QWidget):
@@ -16,9 +17,11 @@ class PluginCenter(QWidget):
         self.summary=label('4 款可安装插件 · 7 项内置工具','heroCaption'); box.addWidget(self.summary); layout.addWidget(hero)
         row=QHBoxLayout(); self.search=QLineEdit(); self.search.setPlaceholderText('搜索插件或工具'); self.search.setClearButtonEnabled(True)
         self.search.setAccessibleName('搜索插件'); self.search.textChanged.connect(self.filter_cards); row.addWidget(self.search,1)
+        self.external=ExternalPlugins(self,label,button,card)
+        row.addWidget(button('导入第三方插件包',self.external.import_package))
         self.refresh=button('刷新插件状态',owner.refresh_plugins,symbol='refresh'); row.addWidget(self.refresh); layout.addLayout(row)
         row=QHBoxLayout(); self.tabs=QButtonGroup(self); self.tabs.setExclusive(True)
-        for title in ('全部','已安装','网络','系统'):
+        for title in ('全部','已安装','网络','系统','第三方'):
             btn=button(title,lambda checked=False,t=title:self.set_category(t)); btn.setCheckable(True); btn.setProperty('kind','filter')
             btn.setChecked(title=='全部'); self.tabs.addButton(btn); row.addWidget(btn)
         row.addStretch(); layout.addLayout(row)
@@ -52,11 +55,11 @@ class PluginCenter(QWidget):
             if key=='ld06': self.ld06_badge=badge
             self.cards.append({'key':key,'name':title,'description':description,'category':category,'widget':frame})
         self.empty=label('没有找到匹配的插件。试试其他关键词或分类。','subtle',True); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setMinimumHeight(100); layout.addWidget(self.empty)
-        footer=label('本地插件目录 · 当前提供 4 款可安装插件，其余为内置工具快捷入口。','caption',True); layout.addWidget(footer)
+        footer=label('支持本地导入第三方 ZIP 插件包；第三方卡片“已导入”仅表示电脑已保存包，不代表设备已安装。','caption',True); layout.addWidget(footer)
         frame,box=card(); row=QHBoxLayout(); row.addWidget(label('设备维护','section')); row.addStretch()
         owner.reboot_btn=button('重启设备',owner.reboot,'danger','power'); row.addWidget(owner.reboot_btn); box.addLayout(row)
         box.addWidget(label('重启会中断服务与 ADB 连接。固件烧录请使用瑞芯微烧录工具。','caption',True)); layout.addWidget(frame)
-        self.filter_cards()
+        self.external.reload()
 
     def open_traffic(self):
         if self.detail_callback: self.detail_callback()
@@ -69,6 +72,7 @@ class PluginCenter(QWidget):
         query=self.search.text().strip().casefold(); visible=0
         for entry in self.cards:
             installed=entry['key']!='traffic' or self.state in ('running','stopped','update','stale')
+            if entry.get('external'): installed=False
             if entry['key']=='camera': installed=self.camera_state in ('installed','update')
             if entry['key']=='ld06': installed=self.ld06_state in ('installed','update')
             if entry['key']=='proxy': installed=self.proxy_state in ('running','stopped')

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "org.example.device-info",
+  "name": "设备信息示例",
+  "version": "1.0.0",
+  "author": "TaishanPi 社区示例",
+  "description": "演示第三方插件：查询系统和磁盘信息，不修改设备配置。",
+  "actions": [
+    {"title": "查询设备信息", "script": "scripts/info.sh"}
+  ]
+}

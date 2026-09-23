@@ -74,3 +74,12 @@ class PackageTests(unittest.TestCase):
             z.writestr(info, '/etc/passwd')
         with self.assertRaises(ValueError):
             read_package(path)
+
+    def test_page_cards_and_poll_are_validated(self):
+        self.manifest['page'] = {'title': 'Status', 'cards': [{'id': 'uptime', 'title': 'Uptime'}],
+                                 'poll': {'script': 'scripts/info.sh', 'interval_ms': 5000, 'format': 'json'}}
+        manifest, _ = read_package(self.package())
+        self.assertEqual(manifest['page']['cards'][0]['id'], 'uptime')
+        self.manifest['page']['cards'].append({'id': 'uptime', 'title': 'Duplicate'})
+        with self.assertRaises(ValueError):
+            read_package(self.package())

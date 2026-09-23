@@ -7,5 +7,14 @@
   "description": "演示第三方插件：查询系统和磁盘信息，不修改设备配置。",
   "actions": [
     {"title": "查询设备信息", "script": "scripts/info.sh"}
-  ]
+  ],
+  "page": {
+    "title": "设备信息面板",
+    "cards": [
+      {"id": "uptime", "title": "运行时间"},
+      {"id": "load", "title": "系统负载"},
+      {"id": "storage", "title": "存储状态"}
+    ],
+    "poll": {"script": "scripts/status.sh", "interval_ms": 5000, "format": "json"}
+  }
 }

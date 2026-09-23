@@ -49,6 +49,34 @@ def read_package(path):
             if len(raw) > 65536 or b'\0' in raw:
                 raise ValueError('脚本过大或包含空字节。')
             scripts[script] = raw.decode('utf-8').replace('\r\n', '\n')
+        page = manifest.get('page')
+        if page is not None:
+            if not isinstance(page, dict) or not isinstance(page.get('title'), str) or len(page['title']) > 100:
+                raise ValueError('页面标题无效。')
+            cards = page.get('cards', [])
+            if not isinstance(cards, list) or len(cards) > 12:
+                raise ValueError('状态卡片不能超过 12 个。')
+            card_ids = set()
+            for card in cards:
+                if (not isinstance(card, dict) or not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', str(card.get('id', '')))
+                        or not isinstance(card.get('title'), str) or len(card['title']) > 80):
+                    raise ValueError('状态卡片定义无效。')
+                if card['id'] in card_ids:
+                    raise ValueError('状态卡片 ID 不能重复。')
+                card_ids.add(card['id'])
+            poll = page.get('poll')
+            if poll is not None:
+                poll_script = poll.get('script') if isinstance(poll, dict) else None
+                if (not isinstance(poll, dict) or not isinstance(poll_script, str)
+                        or not re.fullmatch(r'scripts/[a-zA-Z0-9_-]+\.sh', poll_script)
+                        or not isinstance(poll.get('interval_ms'), int) or not 1000 <= poll['interval_ms'] <= 60000):
+                    raise ValueError('后台轮询定义无效。')
+                if poll.get('format', 'json') != 'json':
+                    raise ValueError('后台轮询只支持 JSON 输出。')
+                raw = archive.read(poll_script)
+                if len(raw) > 65536 or b'\0' in raw:
+                    raise ValueError('轮询脚本过大或包含空字节。')
+                scripts[poll_script] = raw.decode('utf-8').replace('\r\n', '\n')
         files = {e.filename for e in entries if not e.is_dir()}
         if files != {'plugin.json', *scripts}:
             raise ValueError('第一版仅支持 plugin.json 和操作 Shell 脚本。')

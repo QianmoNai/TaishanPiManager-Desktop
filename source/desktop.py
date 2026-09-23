@@ -278,8 +278,8 @@ class Window(QMainWindow):
         actions=QHBoxLayout(); self.upload_btn=button('上传文件',self.upload); self.download_btn=button('下载选中文件',self.download); actions.addWidget(self.upload_btn); actions.addWidget(self.download_btn); actions.addStretch(); box.addLayout(actions)
         self.table=QTableWidget(0,3); self.table.setHorizontalHeaderLabels(['名称','大小','修改时间']); self.table.verticalHeader().hide(); self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch); self.table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.ResizeToContents); self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
-        self.table.setMinimumHeight(260); self.table.cellDoubleClicked.connect(self.open_entry); self.table.verticalHeader().setDefaultSectionSize(45); box.addWidget(self.table)
-        self.file_hint=label('选择设备后打开目录。双击文件夹进入。','caption',True); box.addWidget(self.file_hint); layout.addWidget(frame); layout.addStretch()
+        self.table.setMinimumHeight(260); self.table.cellDoubleClicked.connect(self.open_entry); self.table.verticalHeader().setDefaultSectionSize(45); box.addWidget(self.table,1)
+        self.file_hint=label('选择设备后打开目录。双击文件夹进入。','caption',True); box.addWidget(self.file_hint); layout.addWidget(frame,1)
 
     def console(self,placeholder):
         edit=QPlainTextEdit(); edit.setObjectName('console'); edit.setReadOnly(True); edit.setPlaceholderText(placeholder); edit.setMinimumHeight(250); edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth); return edit
@@ -288,7 +288,7 @@ class Window(QMainWindow):
         layout=self.scroll_page(); frame,box=card(); box.addWidget(label('系统日志','section')); row=QHBoxLayout(); self.log_kind=QComboBox()
         for title,key in [('内核日志 · dmesg','kernel'),('系统日志 · messages','system'),('网络健康监控','monitor'),('监控启动日志','autostart')]: self.log_kind.addItem(title,key)
         row.addWidget(self.log_kind,1); self.log_btn=button('读取日志',self.logs,'primary'); row.addWidget(self.log_btn); row.addWidget(button('另存为…',self.save_logs)); box.addLayout(row)
-        self.log_output=self.console('最近 250 行日志会显示在这里。'); box.addWidget(self.log_output); box.addWidget(label('新固件可能尚未安装网络监控脚本，对应日志会提示不存在。','caption',True)); layout.addWidget(frame); layout.addStretch()
+        self.log_output=self.console('最近 250 行日志会显示在这里。'); box.addWidget(self.log_output,1); box.addWidget(label('新固件可能尚未安装网络监控脚本，对应日志会提示不存在。','caption',True)); layout.addWidget(frame,1)
 
     def build_terminal(self):
         page=QWidget(); page.setObjectName('page'); box=QVBoxLayout(page); box.setContentsMargins(0,0,0,0); box.setSpacing(12); self.stack.addWidget(page)

@@ -36,6 +36,7 @@ class WavePlot(QWidget):
 class SerialPanel(QWidget):
     def __init__(self,owner,label,button,card):
         super().__init__(); self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Preferred); self.setMinimumWidth(0); self.owner=owner; self.generation=0; self.connected=False; self.session_epoch=0; self.preparing=False; self.closing=False; self.rx=0; self.tx=0; self.pending=bytearray(); self.log_pending=bytearray(); self.info={}; self.decoder=WaveDecoder(); self.text_decoder=codecs.getincrementaldecoder('utf-8')('replace')
+        self.display_dropped=0; self.display_column=0
         self.process=QProcess(self); self.process.readyReadStandardOutput.connect(self.drain); self.process.readyReadStandardError.connect(self.drain_error); self.process.finished.connect(self.finished); self.process.errorOccurred.connect(self.process_error)
         self.heartbeat=QTimer(self); self.heartbeat.setInterval(2000); self.heartbeat.timeout.connect(lambda:self.command({'cmd':'ping'}))
         self.timeout=QTimer(self); self.timeout.setSingleShot(True); self.timeout.setInterval(15000); self.timeout.timeout.connect(self.open_timeout)
@@ -146,7 +147,10 @@ class SerialPanel(QWidget):
                 except Exception: continue
                 self.rx+=len(raw)
                 if not self.pause.isChecked(): self.log_pending.extend(raw)
-                if len(self.log_pending)>65536: del self.log_pending[:-65536]
+                if len(self.log_pending)>8192:
+                    self.display_dropped+=len(self.log_pending)-8192
+                    del self.log_pending[:-8192]
+                    self.text_decoder.reset()
                 self.plot.points.extend(self.decoder.feed(raw))
             elif kind=='tx': self.tx+=int(event.get('count',0))
             elif kind=='error': self.state.setText('串口错误：'+event.get('message','')); self.stop()
@@ -175,12 +179,22 @@ class SerialPanel(QWidget):
     def flush_display(self):
         if self.log_pending:
             raw=bytes(self.log_pending); self.log_pending.clear(); text=raw.hex(' ').upper()+'\n' if self.view.currentIndex() else self.text_decoder.decode(raw)
+            # Bound individual QTextDocument blocks even for newline-free binary streams.
+            parts=[]
+            for char in text:
+                if char in '\r\n\u2028\u2029':
+                    parts.append('\n'); self.display_column=0
+                else:
+                    if self.display_column>=256: parts.append('\n'); self.display_column=0
+                    parts.append(char if char.isprintable() or char=='\t' else '·'); self.display_column+=1
+            text=''.join(parts)
             bar=self.receive.verticalScrollBar(); previous=bar.value(); cursor=self.receive.textCursor(); cursor.movePosition(QTextCursor.MoveOperation.End); cursor.insertText(text)
-            if self.receive.document().characterCount()>262144: cursor.movePosition(QTextCursor.MoveOperation.Start); cursor.movePosition(QTextCursor.MoveOperation.NextCharacter,QTextCursor.MoveMode.KeepAnchor,65536); cursor.removeSelectedText()
+            excess=self.receive.document().characterCount()-1-65536
+            if excess>0: cursor.movePosition(QTextCursor.MoveOperation.Start); cursor.movePosition(QTextCursor.MoveOperation.NextCharacter,QTextCursor.MoveMode.KeepAnchor,excess); cursor.removeSelectedText()
             if self.follow.isChecked(): bar.setValue(bar.maximum())
             else: bar.setValue(previous)
-        self.count.setText(f'RX {self.rx} B · TX {self.tx} B · 无效波形帧 {self.decoder.dropped}'); self.plot.update()
-    def clear(self): self.receive.clear(); self.log_pending.clear(); self.rx=0; self.tx=0; self.text_decoder.reset(); self.plot.points.clear(); self.plot.visible_channels=list(range(8)); [c.setChecked(True) for c in self.channel_checks]; self.change_protocol()
+        self.count.setText(f'RX {self.rx} B · TX {self.tx} B · 显示过载丢弃 {self.display_dropped} B · 无效波形帧 {self.decoder.dropped}'); self.plot.update()
+    def clear(self): self.receive.clear(); self.log_pending.clear(); self.rx=0; self.tx=0; self.display_dropped=0; self.display_column=0; self.text_decoder.reset(); self.plot.points.clear(); self.plot.visible_channels=list(range(8)); [c.setChecked(True) for c in self.channel_checks]; self.change_protocol()
     def set_channel_visible(self,channel,visible):
         if visible and channel not in self.plot.visible_channels: self.plot.visible_channels.append(channel); self.plot.visible_channels.sort()
         elif not visible and channel in self.plot.visible_channels: self.plot.visible_channels.remove(channel)

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "com.taishanpi.ui-showcase",
+  "name": "第三方插件 UI 展示",
+  "version": "1.0.0",
+  "author": "TaishanPi Manager",
+  "description": "展示独立页面、12 张状态卡片、后台轮询和多个操作按钮。",
+  "actions": [
+    {"title": "生成设备报告", "script": "scripts/report.sh"},
+    {"title": "检查网络状态", "script": "scripts/network.sh"},
+    {"title": "查看系统日志摘要", "script": "scripts/logs.sh"}
+  ],
+  "page": {
+    "title": "第三方插件 UI 展示面板",
+    "cards": [
+      {"id": "hostname", "title": "主机名"}, {"id": "kernel", "title": "内核版本"},
+      {"id": "uptime", "title": "运行时间"}, {"id": "load", "title": "系统负载"},
+      {"id": "memory", "title": "内存使用"}, {"id": "storage", "title": "userdata 存储"},
+      {"id": "ip", "title": "局域网地址"}, {"id": "route", "title": "默认路由"},
+      {"id": "temperature", "title": "CPU 温度"}, {"id": "processes", "title": "进程数量"},
+      {"id": "time", "title": "设备时间"}, {"id": "status", "title": "采集状态"}
+    ],
+    "poll": {"script": "scripts/status.sh", "interval_ms": 5000, "format": "json"}
+  }
+}

@@ -1,9 +1,61 @@
 import json
-from PySide6.QtCore import QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QObject, QStandardPaths, Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
                              QPushButton, QPlainTextEdit, QFileDialog, QMessageBox, QDialogButtonBox,
-                             QScrollArea, QFrame, QSizePolicy)
+                             QScrollArea, QFrame, QSizePolicy, QGraphicsOpacityEffect)
 from external_plugins import PluginStore, read_package
+
+
+class CardMotion(QObject):
+    """One reusable transition per card; no idle repaint or nested effects."""
+
+    def __init__(self, dialog):
+        super().__init__(dialog)
+        self.closed = False
+        self.entries = {}
+        dialog.finished.connect(self.stop)
+
+    def reveal(self, widget, delay=0):
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.0)
+        widget.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b'opacity', self)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda: effect.setEnabled(False))
+        delay_timer = QTimer(self)
+        delay_timer.setSingleShot(True)
+        delay_timer.timeout.connect(lambda: self._play(widget, 0.0, 260))
+        self.entries[widget] = (effect, animation, delay_timer)
+        delay_timer.start(delay)
+
+    def _play(self, widget, start, duration):
+        if self.closed:
+            return
+        effect, animation, _ = self.entries[widget]
+        animation.stop()
+        effect.setEnabled(True)
+        effect.setOpacity(start)
+        animation.setStartValue(start)
+        animation.setDuration(duration)
+        animation.start()
+
+    def pulse(self, widget):
+        if self.closed:
+            return
+        effect, animation, delay_timer = self.entries[widget]
+        # Do not interrupt the entrance or a pulse already in progress.
+        if delay_timer.isActive() or effect.isEnabled() or not widget.isVisible():
+            return
+        self._play(widget, 0.86, 200)
+
+    def stop(self, *_):
+        self.closed = True
+        for effect, animation, delay_timer in self.entries.values():
+            delay_timer.stop()
+            animation.stop()
+            effect.setOpacity(1.0)
+            effect.setEnabled(False)
 
 
 class ExternalPlugins:
@@ -145,6 +197,7 @@ class ExternalPlugins:
         status = self.label('后台任务未启动', 'heroCaption'); header.addWidget(status, 0, Qt.AlignmentFlag.AlignTop)
         hero_box.addLayout(header); layout.addWidget(hero)
         cards = {}
+        card_frames = {}
         grid = QGridLayout()
         grid.setSpacing(14)
         for index, spec in enumerate(page.get('cards', [])):
@@ -154,6 +207,7 @@ class ExternalPlugins:
             card_layout.addWidget(title); card_layout.addWidget(value)
             grid.addWidget(card, index // 3, index % 3)
             cards[spec['id']] = value
+            card_frames[spec['id']] = card
         layout.addLayout(grid)
         actions_card, actions_box = self.card(); actions_box.addWidget(self.label('插件操作', 'section'))
         actions_hint = self.label('操作由插件作者提供，执行前会遵循当前插件的信任设置。', 'caption', True); actions_box.addWidget(actions_hint)
@@ -162,8 +216,27 @@ class ExternalPlugins:
         output = QPlainTextEdit(); output.setObjectName('console'); output.setReadOnly(True); output.setMaximumBlockCount(500); output.setMinimumHeight(120); output_box.addWidget(output); layout.addWidget(output_card)
         area.setWidget(page_widget); outer.addWidget(area)
 
+        motion = CardMotion(dialog)
+        motion.reveal(hero)
+        for index, frame in enumerate(card_frames.values()):
+            motion.reveal(frame, 35 + (index // 3) * 30)
+        motion.reveal(actions_card, 155)
+        motion.reveal(output_card, 185)
+
+        def set_output(text):
+            if motion.closed:
+                return
+            if output.toPlainText() != text:
+                output.setPlainText(text)
+                motion.pulse(output_card)
+
+        def set_status(text):
+            if status.text() != text:
+                status.setText(text)
+                motion.pulse(hero)
+
         def run_script(script, finished, label):
-            if self.owner.busy or not self.owner.require_device(): return
+            if motion.closed or self.owner.busy or not self.owner.require_device(): return
             serial = self.owner.serial
             def work():
                 try:
@@ -171,22 +244,25 @@ class ExternalPlugins:
                         input_data=script.encode('utf-8'), timeout=65, check=False)
                 except Exception as exc:
                     return b'', str(exc), -1
-            self.owner.work(work, lambda result:finished(serial, result), label, silent=True)
+            self.owner.work(work, lambda result: None if motion.closed else finished(serial, result), label, silent=True)
 
         def poll_done(serial, result):
             data, error, code = result
             if serial != self.owner.serial: return
             if code:
-                output.setPlainText('轮询失败：' + error); return
+                set_output('轮询失败：' + error); return
             try:
                 values = json.loads(data.decode('utf-8'))
                 if not isinstance(values, dict): raise ValueError('结果不是 JSON 对象')
                 for key, widget in cards.items():
                     value = values.get(key, '—')
-                    widget.setText(str(value)[:200])
-                status.setText('● 已连接 · ' + serial); output.setPlainText('最近更新：设备 ' + serial)
+                    text = str(value)[:200]
+                    if widget.text() != text:
+                        widget.setText(text)
+                        motion.pulse(card_frames[key])
+                set_status('● 已连接 · ' + serial); set_output('最近更新：设备 ' + serial)
             except Exception as exc:
-                output.setPlainText('轮询结果无效：' + str(exc))
+                set_output('轮询结果无效：' + str(exc))
 
         timer = QTimer(dialog)
         poll = page.get('poll')
@@ -200,8 +276,9 @@ class ExternalPlugins:
             def execute(checked=False, action=action):
                 if not self.owner.require_device(): return
                 if not self.store.is_trusted(manifest['id']) and not self.owner.ask('执行第三方插件操作', '脚本将在当前设备上运行，可能拥有 root 权限。继续？'): return
-                run_script(scripts[action['script']], lambda serial,result: output.setPlainText(
+                run_script(scripts[action['script']], lambda serial,result: set_output(
                     '设备：' + serial + '\n退出码：' + str(result[2]) + '\n' + result[0].decode('utf-8','replace')[-65536:] + '\n' + result[1]), '正在执行第三方插件操作…')
             button.clicked.connect(execute); action_row.addWidget(button)
         dialog.finished.connect(timer.stop)
         dialog.exec()
+        dialog.deleteLater()

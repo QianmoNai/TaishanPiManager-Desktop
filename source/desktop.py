@@ -1083,7 +1083,8 @@ def main():
             ok = ok and all((ASSETS/name).is_file() for name in (*NAMES,'S95check-monitor'))
             from adb_core import PORTABLE
             ok = ok and all((PORTABLE/'iperf3'/name).is_file() for name in ('iperf3.exe','cygwin1.dll'))
-            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(window.plugin_center.cards)==11 and hasattr(window,'rgb_tool') and hasattr(window,'pin_tool')
+            builtin_cards = [entry for entry in window.plugin_center.cards if not entry.get('external')]
+            ok = ok and hasattr(window,'traffic') and len(window.traffic.values)==4 and len(builtin_cards)==11 and hasattr(window,'rgb_tool') and hasattr(window,'pin_tool')
             from proxy_plugin import ASSETS as PROXY_ASSETS
             ok = ok and (PROXY_ASSETS/'mihomo.gz').is_file() and _CHECKMARK.is_file()
             from serial_assistant import ASSETS as SERIAL_ASSETS

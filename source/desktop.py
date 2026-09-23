@@ -962,6 +962,9 @@ QPushButton[kind="nav"]:checked { background: #dceaff; color: #0069de; font-weig
 QPushButton:disabled { background: #f0f0f3; color: #b6b6bd; }
 QLineEdit, QComboBox { min-height: 21px; padding: 8px 12px; background: #f5f6f9; border: 1px solid #eceef3; border-radius: 9px; selection-background-color: #007aff; }
 QLineEdit:focus, QComboBox:focus { border: 1px solid #80b8ff; }
+QSpinBox { min-height: 21px; padding: 8px 24px 8px 12px; color: #202124; background: #f5f6f9; border: 1px solid #eceef3; border-radius: 9px; selection-background-color: #007aff; selection-color: white; }
+QSpinBox:focus { border-color: #80b8ff; }
+QSpinBox:disabled { color: #8e8e93; }
 QComboBox::drop-down { border: none; width: 25px; }
 QComboBox QAbstractItemView { background: white; selection-background-color: #e1edff; selection-color: #0064d8; border: 1px solid #e5e5ec; outline: none; padding: 4px; }
 QPlainTextEdit { background: #f7f8fb; border: 1px solid #e9ecf2; border-radius: 12px; padding: 12px; font-family: "Cascadia Code", "Consolas", "Microsoft YaHei UI"; font-size: 12px; selection-background-color: #cce3ff; }
@@ -1030,6 +1033,9 @@ QPushButton[kind="nav"]:checked { background: #233956; color: #78b5ff; }
 QPushButton:disabled { background: #29292e; color: #71717b; }
 QLineEdit, QComboBox { background: #1c1c20; border-color: #3b3b43; selection-background-color: #0a64ce; selection-color: white; }
 QLineEdit:focus, QComboBox:focus { border-color: #599eea; }
+QSpinBox { color: #f2f2f7; background: #1c1c20; border-color: #3b3b43; selection-background-color: #0a64ce; }
+QSpinBox:focus { border-color: #599eea; }
+QSpinBox:disabled { color: #8e8e93; }
 QComboBox QAbstractItemView { background: #29292e; color: #f2f2f7; selection-background-color: #233f63; selection-color: #c4dfff; border-color: #44444c; }
 QPlainTextEdit, QPlainTextEdit#console { background: #1b1c21; color: #d0d8e5; border-color: #35353f; selection-background-color: #234875; selection-color: white; }
 QProgressBar { background: #35353e; }

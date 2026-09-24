@@ -8,7 +8,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QPlainTextEdit
 
-APP_VERSION = '2.64'
+APP_VERSION = '2.65'
 RELEASES_URL = 'https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases'
 API_URL = 'https://gitee.com/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases/latest'
 MAX_RESPONSE = 512 * 1024
@@ -50,6 +50,7 @@ class UpdateDialog(QDialog):
         self.reply = None
         self.payload = bytearray()
         self.failure = ''
+        self.redirect_count = 0
         self.release_url = RELEASES_URL
         self.closed = False
         self.manager = QNetworkAccessManager(self)
@@ -93,11 +94,16 @@ class UpdateDialog(QDialog):
             return
         self.payload.clear()
         self.failure = ''
+        self.redirect_count = 0
         self.release_url = RELEASES_URL
         self.notes.clear()
         self.status.setText('正在检查 Gitee 最新正式发布版…')
         self.check_button.setEnabled(False)
-        request = QNetworkRequest(QUrl(API_URL))
+        self.deadline.start(15000)
+        self.start_request(QUrl(API_URL))
+
+    def start_request(self, url):
+        request = QNetworkRequest(url)
         request.setRawHeader(b'Accept', b'application/json')
         request.setRawHeader(b'User-Agent', ('TaishanPiManager/' + APP_VERSION).encode('ascii'))
         request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,
@@ -107,7 +113,6 @@ class UpdateDialog(QDialog):
         self.reply.setReadBufferSize(MAX_RESPONSE + 1)
         self.reply.readyRead.connect(self.read_data)
         self.reply.finished.connect(self.complete)
-        self.deadline.start(15000)
 
     def abort(self, reason):
         if self.reply is not None:
@@ -126,29 +131,57 @@ class UpdateDialog(QDialog):
             return
         reply = self.reply
         self.read_data()
-        self.deadline.stop()
         self.reply = None
-        self.check_button.setEnabled(True)
         code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
+        error = reply.error()
+        error_name = error.name
+        diagnostics = f'更新源：Gitee\nHTTP：{code if code is not None else "未收到响应"}\nQt 网络状态：{error_name}\n接口：{API_URL}'
         try:
             if self.closed:
                 return
             if self.failure:
                 raise ValueError(self.failure)
+            if code in (301, 302, 303, 307, 308):
+                target = reply.attribute(QNetworkRequest.Attribute.RedirectionTargetAttribute)
+                target = reply.url().resolved(target) if isinstance(target, QUrl) else QUrl()
+                if (not target.isValid() or target.scheme() != 'https' or target.host() != 'gitee.com'
+                        or target.port(443) != 443 or target.userInfo()
+                        or not target.path().startswith('/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases')
+                        or target.hasQuery() or target.hasFragment()):
+                    raise ValueError('接口跳转到非预期地址，已停止。请手动查看发布页。')
+                if self.redirect_count >= 3:
+                    raise ValueError('接口重定向次数过多，已停止。')
+                self.redirect_count += 1
+                self.payload.clear()
+                self.start_request(target)
+                return
             if code in (403, 429):
                 raise ValueError('Gitee 请求被限制，请稍后重试或手动打开发布页。')
             if code == 404:
                 raise ValueError('未找到可访问的正式发布版；仓库可能为私有或尚未发布，请手动查看发布页。')
-            if reply.error() != QNetworkReply.NetworkError.NoError or code != 200:
-                raise ValueError('无法获取更新信息，请检查网络或手动打开发布页。')
+            if error != QNetworkReply.NetworkError.NoError or code != 200:
+                hints = {
+                    'SslHandshakeFailedError': 'TLS 握手失败，请检查系统时间、证书或 HTTPS 代理；不要关闭证书校验。',
+                    'HostNotFoundError': '无法解析 Gitee 域名，请检查 DNS。',
+                    'ConnectionRefusedError': '连接被拒绝，请检查网络或代理。',
+                    'ProxyConnectionRefusedError': '代理连接被拒绝，请检查系统代理是否可用。',
+                    'ProxyAuthenticationRequiredError': '系统代理要求认证，请检查代理配置。',
+                    'TimeoutError': '网络请求超时，请稍后重试。',
+                    'RemoteHostClosedError': '远端提前关闭连接，请检查网络或代理后重试。',
+                }
+                raise ValueError(hints.get(error_name, '接口请求失败，具体状态见下方诊断信息。'))
             release = parse_release(bytes(self.payload))
             self.release_url = release['url']
             self.notes.setPlainText(release['notes'])
             self.status.setText(('发现新版本：' if release['newer'] else '未发现比当前程序更新的正式版本；线上版本：') + release['tag'])
         except ValueError as exc:
             self.status.setText('检查失败：' + str(exc))
+            self.notes.setPlainText(diagnostics + '\n\n说明：' + str(exc))
         finally:
             reply.deleteLater()
+            if self.reply is None:
+                self.deadline.stop()
+                self.check_button.setEnabled(True)
 
     def open_release(self):
         if not QDesktopServices.openUrl(QUrl(self.release_url)):

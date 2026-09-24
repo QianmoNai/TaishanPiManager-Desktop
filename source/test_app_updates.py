@@ -3,13 +3,13 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import json
 import unittest
 from unittest.mock import patch
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtNetwork import QNetworkReply
+from PySide6.QtCore import QObject, Signal, QUrl
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QApplication
 from app_updates import APP_VERSION, API_URL, MAX_RESPONSE, RELEASES_URL, UpdateDialog, parse_release, version_tuple
 
 
-def payload(tag='v2.65-release', **kwargs):
+def payload(tag='v2.66-release', **kwargs):
     data = dict(tag_name=tag, prerelease=False, body='测试更新说明')
     data.update(kwargs)
     return json.dumps(data).encode()
@@ -64,7 +64,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_url_not_controlled_by_remote(self):
         result = parse_release(payload(html_url='file:///evil', body='<script>test</script>'))
-        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.65-release')
+        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.66-release')
         self.assertEqual(result['notes'], '<script>test</script>')
 
 
@@ -94,6 +94,47 @@ class UpdateDialogTests(unittest.TestCase):
         dialog = self.exercise(payload(body='<b>更新</b>'))
         self.assertIn('发现新版本', dialog.status.text())
         self.assertEqual(dialog.notes.toPlainText(), '<b>更新</b>')
+        dialog.reject()
+
+    def test_safe_redirect_and_limit(self):
+        dialog = UpdateDialog()
+        reply = FakeReply(b'', 302)
+        reply.url = lambda: QUrl(API_URL)
+        reply.attribute = lambda key: (302 if key == QNetworkRequest.Attribute.HttpStatusCodeAttribute
+                                        else QUrl(API_URL + '/'))
+        with patch.object(dialog.manager, 'get', return_value=reply) as get:
+            dialog.check()
+            for _ in range(4):
+                dialog.complete()
+            self.assertEqual(get.call_count, 4)
+        self.assertIn('重定向次数过多', dialog.status.text())
+        self.assertTrue(dialog.check_button.isEnabled())
+        dialog.reject()
+
+    def test_block_untrusted_redirects(self):
+        for target in ('http://gitee.com/x', 'https://evil.example/x',
+                       'https://gitee.com/login', API_URL+'?access_token=secret'):
+            dialog = UpdateDialog()
+            reply = FakeReply(b'', 302)
+            reply.url = lambda: QUrl(API_URL)
+            reply.attribute = lambda key: (302 if key == QNetworkRequest.Attribute.HttpStatusCodeAttribute
+                                            else QUrl(target))
+            with patch.object(dialog.manager, 'get', return_value=reply) as get:
+                dialog.check(); reply.finished.emit()
+                self.assertEqual(get.call_count, 1)
+            self.assertIn('非预期地址', dialog.status.text())
+            self.assertNotIn('secret', dialog.notes.toPlainText())
+            dialog.reject()
+
+    def test_tls_diagnostic(self):
+        dialog = UpdateDialog()
+        reply = FakeReply(b'', None)
+        reply.error = lambda: QNetworkReply.NetworkError.SslHandshakeFailedError
+        with patch.object(dialog.manager, 'get', return_value=reply):
+            dialog.check(); reply.finished.emit()
+        self.assertIn('TLS', dialog.status.text())
+        self.assertIn('SslHandshakeFailedError', dialog.notes.toPlainText())
+        self.assertIn('未收到响应', dialog.notes.toPlainText())
         dialog.reject()
 
     def test_failures_not_reported_as_up_to_date(self):
@@ -150,7 +191,7 @@ class UpdateDialogTests(unittest.TestCase):
             dialog = self.exercise(payload())
             open_url.assert_not_called()
             dialog.release_button.click()
-            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.65-release')
+            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.66-release')
             dialog.reject()
 
 

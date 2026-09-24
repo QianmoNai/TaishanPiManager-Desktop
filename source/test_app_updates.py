@@ -6,10 +6,10 @@ from unittest.mock import patch
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QApplication
-from app_updates import APP_VERSION, API_URL, MAX_RESPONSE, RELEASES_URL, UpdateDialog, parse_release, version_tuple
+from app_updates import APP_VERSION, API_URL, MAX_RESPONSE, RELEASES_URL, UpdateStatus as UpdateDialog, parse_release, version_tuple
 
 
-def payload(tag='v2.66-release', **kwargs):
+def payload(tag='v2.67-release', **kwargs):
     data = dict(tag_name=tag, prerelease=False, body='测试更新说明')
     data.update(kwargs)
     return json.dumps(data).encode()
@@ -64,7 +64,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_url_not_controlled_by_remote(self):
         result = parse_release(payload(html_url='file:///evil', body='<script>test</script>'))
-        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.66-release')
+        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.67-release')
         self.assertEqual(result['notes'], '<script>test</script>')
 
 
@@ -107,7 +107,7 @@ class UpdateDialogTests(unittest.TestCase):
             for _ in range(4):
                 dialog.complete()
             self.assertEqual(get.call_count, 4)
-        self.assertIn('重定向次数过多', dialog.status.text())
+        self.assertIn('重定向次数过多', dialog.notes.toPlainText())
         self.assertTrue(dialog.check_button.isEnabled())
         dialog.reject()
 
@@ -122,7 +122,7 @@ class UpdateDialogTests(unittest.TestCase):
             with patch.object(dialog.manager, 'get', return_value=reply) as get:
                 dialog.check(); reply.finished.emit()
                 self.assertEqual(get.call_count, 1)
-            self.assertIn('非预期地址', dialog.status.text())
+            self.assertIn('非预期地址', dialog.notes.toPlainText())
             self.assertNotIn('secret', dialog.notes.toPlainText())
             dialog.reject()
 
@@ -132,7 +132,7 @@ class UpdateDialogTests(unittest.TestCase):
         reply.error = lambda: QNetworkReply.NetworkError.SslHandshakeFailedError
         with patch.object(dialog.manager, 'get', return_value=reply):
             dialog.check(); reply.finished.emit()
-        self.assertIn('TLS', dialog.status.text())
+        self.assertIn('TLS', dialog.notes.toPlainText())
         self.assertIn('SslHandshakeFailedError', dialog.notes.toPlainText())
         self.assertIn('未收到响应', dialog.notes.toPlainText())
         dialog.reject()
@@ -157,7 +157,7 @@ class UpdateDialogTests(unittest.TestCase):
         with patch.object(dialog.manager, 'get', return_value=second):
             dialog.check()
             second.finished.emit()
-        self.assertIn('未发现比当前程序更新', dialog.status.text())
+        self.assertEqual('暂无更新', dialog.status.text())
         self.assertEqual(dialog.failure, '')
         dialog.reject()
 
@@ -166,15 +166,19 @@ class UpdateDialogTests(unittest.TestCase):
         from test_desktop import FakeApi
         configure_app(self.app)
         window = Window(FakeApi(), autostart=False)
-        with patch.object(UpdateDialog, 'check') as check:
+        reply = FakeReply(payload())
+        with patch.object(window.update_status.manager, 'get', return_value=reply) as get:
             window.update_btn.click()
-            dialog = window.update_dialog
+            dialog = window.update_status
             window.update_btn.click()
-            self.assertIs(window.update_dialog, dialog)
-            self.assertEqual(check.call_count, 1)
+            self.assertIs(window.update_status, dialog)
+            self.assertEqual(get.call_count, 1)
+            self.assertFalse(dialog.isWindow())
+            self.assertFalse(dialog.isHidden())
+            self.assertTrue(dialog.notes.isHidden())
             window.close()
-            self.assertIsNone(window.update_dialog)
             self.assertTrue(dialog.closed)
+            self.assertTrue(reply.aborted)
         window.deleteLater()
 
     def test_close_cancels(self):
@@ -191,7 +195,7 @@ class UpdateDialogTests(unittest.TestCase):
             dialog = self.exercise(payload())
             open_url.assert_not_called()
             dialog.release_button.click()
-            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.66-release')
+            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.67-release')
             dialog.reject()
 
 

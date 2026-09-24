@@ -6,9 +6,9 @@ from urllib.parse import quote
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QPlainTextEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QPlainTextEdit
 
-APP_VERSION = '2.65'
+APP_VERSION = '2.66'
 RELEASES_URL = 'https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases'
 API_URL = 'https://gitee.com/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases/latest'
 MAX_RESPONSE = 512 * 1024
@@ -41,12 +41,10 @@ def parse_release(raw, current=APP_VERSION):
                 notes=body[:32000], url=RELEASES_URL + '/tag/' + quote(tag, safe=''))
 
 
-class UpdateDialog(QDialog):
-    def __init__(self, parent=None):
+class UpdateStatus(QWidget):
+    """Inline sidebar feedback; never opens a separate window."""
+    def __init__(self, parent=None, check_button=None):
         super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setWindowTitle('检查更新 · 泰山派设备管理')
-        self.resize(620, 460)
         self.reply = None
         self.payload = bytearray()
         self.failure = ''
@@ -58,36 +56,26 @@ class UpdateDialog(QDialog):
         self.deadline.setSingleShot(True)
         self.deadline.timeout.connect(lambda: self.abort('请求超时，请检查网络后重试。'))
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(12)
-        version = QLabel('当前程序版本：v' + APP_VERSION)
-        version.setObjectName('section')
-        layout.addWidget(version)
-        self.status = QLabel('点击“检查更新”查询最新正式发布版。')
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        self.status = QLabel('')
+        self.status.setObjectName('caption')
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        notice = QLabel('仅在点击时连接 Gitee，不需要登录或连接开发板。不上传设备信息，不自动下载或安装。')
-        notice.setObjectName('caption')
-        notice.setWordWrap(True)
-        layout.addWidget(notice)
-        self.notes = QPlainTextEdit()
+        # Retain diagnostic text for tests/support, without a visible detail pane.
+        self.notes = QPlainTextEdit(self)
         self.notes.setReadOnly(True)
-        self.notes.setPlaceholderText('更新说明将以纯文本显示。')
-        layout.addWidget(self.notes, 1)
-        buttons = QHBoxLayout()
-        self.check_button = QPushButton('检查更新')
-        self.check_button.setProperty('kind', 'primary')
-        self.check_button.clicked.connect(self.check)
-        self.release_button = QPushButton('打开发布页')
+        self.notes.hide()
+        self.check_button = check_button or QPushButton('检查更新', self)
+        if check_button is None:
+            self.check_button.hide()
+            self.check_button.clicked.connect(self.check)
+        self.release_button = QPushButton('前往发布页', self)
+        self.release_button.setFlat(True)
         self.release_button.clicked.connect(self.open_release)
-        close_button = QPushButton('关闭')
-        close_button.clicked.connect(self.reject)
-        for button in (self.check_button, self.release_button, close_button):
-            button.setMinimumHeight(38)
-            buttons.addWidget(button)
-        layout.addLayout(buttons)
-        self.finished.connect(self.cancel)
+        layout.addWidget(self.release_button)
+        self.release_button.hide()
 
     def check(self):
         if self.closed or self.reply is not None:
@@ -97,7 +85,9 @@ class UpdateDialog(QDialog):
         self.redirect_count = 0
         self.release_url = RELEASES_URL
         self.notes.clear()
-        self.status.setText('正在检查 Gitee 最新正式发布版…')
+        self.status.setToolTip('')
+        self.release_button.hide()
+        self.status.setText('正在检查更新…')
         self.check_button.setEnabled(False)
         self.deadline.start(15000)
         self.start_request(QUrl(API_URL))
@@ -173,10 +163,16 @@ class UpdateDialog(QDialog):
             release = parse_release(bytes(self.payload))
             self.release_url = release['url']
             self.notes.setPlainText(release['notes'])
-            self.status.setText(('发现新版本：' if release['newer'] else '未发现比当前程序更新的正式版本；线上版本：') + release['tag'])
+            self.status.setText(('发现新版本：' + release['tag']) if release['newer'] else '暂无更新')
+            self.release_button.setVisible(release['newer'])
         except ValueError as exc:
-            self.status.setText('检查失败：' + str(exc))
+            summary = ('请求超时，请重试' if '超时' in str(exc) else
+                       '认证失败（HTTP 401）' if code == 401 else
+                       f'HTTP {code}' if code is not None else error_name)
+            self.status.setText('检查失败：' + summary)
             self.notes.setPlainText(diagnostics + '\n\n说明：' + str(exc))
+            self.status.setToolTip(self.notes.toPlainText())
+            self.release_button.show()
         finally:
             reply.deleteLater()
             if self.reply is None:
@@ -196,3 +192,7 @@ class UpdateDialog(QDialog):
             reply.readyRead.disconnect(self.read_data)
             reply.abort()
             reply.deleteLater()
+
+    def reject(self):
+        self.cancel()
+        self.hide()

@@ -6,11 +6,11 @@ from unittest.mock import patch
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QNetworkReply
 from PySide6.QtWidgets import QApplication
-from app_updates import APP_VERSION, MAX_RESPONSE, RELEASES_URL, UpdateDialog, parse_release, version_tuple
+from app_updates import APP_VERSION, API_URL, MAX_RESPONSE, RELEASES_URL, UpdateDialog, parse_release, version_tuple
 
 
-def payload(tag='v2.64-release', **kwargs):
-    data = dict(tag_name=tag, draft=False, prerelease=False, body='测试更新说明')
+def payload(tag='v2.65-release', **kwargs):
+    data = dict(tag_name=tag, prerelease=False, body='测试更新说明')
     data.update(kwargs)
     return json.dumps(data).encode()
 
@@ -35,6 +35,17 @@ class FakeReply(QObject):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_gitee_without_draft_field(self):
+        data = json.loads(payload())
+        self.assertNotIn('draft', data)
+        self.assertTrue(parse_release(json.dumps(data).encode())['newer'])
+        data['draft'] = False
+        self.assertTrue(parse_release(json.dumps(data).encode())['newer'])
+
+    def test_gitee_endpoints(self):
+        self.assertEqual(API_URL, 'https://gitee.com/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases/latest')
+        self.assertEqual(RELEASES_URL, 'https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases')
+
     def test_numeric_order_and_release_suffix(self):
         self.assertGreater(version_tuple('v2.10'), version_tuple('v2.9'))
         self.assertEqual(version_tuple('v2.63-release'), version_tuple('2.63.0'))
@@ -53,7 +64,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_url_not_controlled_by_remote(self):
         result = parse_release(payload(html_url='file:///evil', body='<script>test</script>'))
-        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.64-release')
+        self.assertEqual(result['url'], RELEASES_URL+'/tag/v2.65-release')
         self.assertEqual(result['notes'], '<script>test</script>')
 
 
@@ -68,6 +79,10 @@ class UpdateDialogTests(unittest.TestCase):
             dialog.check()
             dialog.check()
             self.assertEqual(get.call_count, 1)
+            request = get.call_args.args[0]
+            self.assertEqual(request.url().toString(), API_URL)
+            self.assertEqual(bytes(request.rawHeader('Accept')), b'application/json')
+            self.assertFalse(request.hasRawHeader('Authorization'))
             self.assertFalse(dialog.check_button.isEnabled())
             reply.readyRead.emit()
             if dialog.reply is not None: reply.finished.emit()
@@ -135,7 +150,7 @@ class UpdateDialogTests(unittest.TestCase):
             dialog = self.exercise(payload())
             open_url.assert_not_called()
             dialog.release_button.click()
-            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.64-release')
+            self.assertEqual(open_url.call_args.args[0].toString(), RELEASES_URL+'/tag/v2.65-release')
             dialog.reject()
 
 

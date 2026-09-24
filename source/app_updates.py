@@ -8,9 +8,9 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QPlainTextEdit
 
-APP_VERSION = '2.63'
-RELEASES_URL = 'https://github.com/QianmoNai/TaishanPiManager-Desktop/releases'
-API_URL = 'https://api.github.com/repos/QianmoNai/TaishanPiManager-Desktop/releases/latest'
+APP_VERSION = '2.64'
+RELEASES_URL = 'https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases'
+API_URL = 'https://gitee.com/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases/latest'
 MAX_RESPONSE = 512 * 1024
 
 
@@ -28,7 +28,8 @@ def parse_release(raw, current=APP_VERSION):
         data = json.loads(raw)
     except (ValueError, UnicodeError) as exc:
         raise ValueError('服务器返回的更新信息无效。') from exc
-    if not isinstance(data, dict) or data.get('draft') is not False or data.get('prerelease') is not False:
+    # Gitee public release responses may omit the GitHub-specific draft field.
+    if not isinstance(data, dict) or data.get('draft', False) is not False or data.get('prerelease') is not False:
         raise ValueError('未收到有效的正式发布信息，请手动查看发布页。')
     tag = data.get('tag_name')
     latest = version_tuple(tag)
@@ -65,7 +66,7 @@ class UpdateDialog(QDialog):
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        notice = QLabel('仅在点击时连接 GitHub，不需要登录或连接开发板。不上传设备信息，不自动下载或安装。')
+        notice = QLabel('仅在点击时连接 Gitee，不需要登录或连接开发板。不上传设备信息，不自动下载或安装。')
         notice.setObjectName('caption')
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -94,10 +95,10 @@ class UpdateDialog(QDialog):
         self.failure = ''
         self.release_url = RELEASES_URL
         self.notes.clear()
-        self.status.setText('正在检查 GitHub 最新正式发布版…')
+        self.status.setText('正在检查 Gitee 最新正式发布版…')
         self.check_button.setEnabled(False)
         request = QNetworkRequest(QUrl(API_URL))
-        request.setRawHeader(b'Accept', b'application/vnd.github+json')
+        request.setRawHeader(b'Accept', b'application/json')
         request.setRawHeader(b'User-Agent', ('TaishanPiManager/' + APP_VERSION).encode('ascii'))
         request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,
                              QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
@@ -135,7 +136,7 @@ class UpdateDialog(QDialog):
             if self.failure:
                 raise ValueError(self.failure)
             if code in (403, 429):
-                raise ValueError('GitHub 请求被限制，请稍后重试或手动打开发布页。')
+                raise ValueError('Gitee 请求被限制，请稍后重试或手动打开发布页。')
             if code == 404:
                 raise ValueError('未找到可访问的正式发布版；仓库可能为私有或尚未发布，请手动查看发布页。')
             if reply.error() != QNetworkReply.NetworkError.NoError or code != 200:

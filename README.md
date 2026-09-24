@@ -123,9 +123,11 @@ dist/                构建产物
 
 ## 🕘 版本历史
 
-项目保留了从 `v1.0` 到 `v2.48` 的完整 Git 提交历史和版本标签。查看具体改动可进入 [Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags)，每个版本的验证记录位于`docs/` 下的版本验证记录。
+项目保留了从 `v1.0` 起的迭代提交历史，当前版本基线标签已到 `v2.62`。查看历史可进入 [Gitee Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags) 或 [GitHub Tags](https://github.com/QianmoNai/TaishanPiManager-Desktop/tags)；已编写的版本验证记录保存在 [`docs/`](docs/) 中，并非每个标签都有独立验证文档。
 
-当前版本 `v2.48` 新增 UP 自建测速节点支持，板端可以使用配置的 HTTP 测速服务进行公网测速。
+当前正式发布版为 **[`v2.62-release`](https://github.com/QianmoNai/TaishanPiManager-Desktop/releases/tag/v2.62-release)**，提供 Windows x64 精简便携包，解压即可运行。近期更新包括第三方 ZIP 插件导入与信任机制、独立页面和状态卡片、后台轮询、与本体一致的浅色/深色 UI，以及卡片淡入和内容变化时的轻量动画。使用方法见[使用说明](docs/使用说明.md)，开发与示例见[第三方插件包开发指南](docs/第三方插件开发.md)。
+
+📌 版本标签沿用“源码改动前保存基线”的约定：旧 `v2.62` 指向动画改动前的代码，**不是本次 Release 的源码标签**；下载或检查当前发布版源码请使用 `v2.62-release`。仅修改文档、图片或示例插件包不创建新的主程序版本标签。
 
 ## 📚 文档
 

@@ -96,6 +96,18 @@ py -3.13 -m venv .venv
 
 如果电脑上已有 Android SDK Platform Tools，也可以直接使用系统 `adb`。否则请保留项目中的 `adb` 目录，应用会优先查找随项目提供的工具。
 
+## 💾 烧录教程与固件下载
+
+首次使用泰山派、需要重新烧录系统或恢复设备时，可参考以下资源：
+
+| 资源 | 链接 |
+| --- | --- |
+| 📖 泰山派烧录教程与下载中心 | [立创开发板 Wiki · TaishanPi RK3566](https://wiki.lckfb.com/zh-hans/tspi-rk3566/download-center.html) |
+| ☁️ 泰山派固件发布（百度网盘） | [打开固件分享链接](https://pan.baidu.com/s/5esrmrCqZJGSMTMqvXbYOtA) |
+| ⚡ 固件下载（不限速入口） | [download.qianmo.icu](https://download.qianmo.icu/files/) |
+
+⚠️ 下载前请核对板型、固件版本和配套说明，烧录前备份重要数据。具体烧录工具、驱动及操作步骤以教程为准；本项目是设备管理工具，不提供固件烧录功能。实际下载速度取决于网络与服务器情况。
+
 ## 🔗 连接方式
 
 - 🔌 USB ADB：适合首次配置、救援和没有网络的设备。

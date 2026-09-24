@@ -96,6 +96,10 @@ py -3.13 -m venv .venv
 
 如果电脑上已有 Android SDK Platform Tools，也可以直接使用系统 `adb`。否则请保留项目中的 `adb` 目录，应用会优先查找随项目提供的工具。
 
+### 🔄 检查更新（本地 v2.63 新增，尚未发布 Release）
+
+侧栏点击“检查更新”，后台查询 GitHub 最新正式 Release，显示版本和更新说明；点击“打开发布页”后自行下载。无需连接开发板，不上传设备信息，不自动安装。普通 Git 标签不是更新来源；网络失败、限流或仓库不可公开访问时会明确提示，不能视为“已经是最新版”。详见[使用说明](docs/使用说明.md)。
+
 ## 💾 烧录教程与固件下载
 
 首次使用泰山派、需要重新烧录系统或恢复设备时，可参考以下资源：
@@ -137,7 +141,7 @@ dist/                构建产物
 
 ## 🕘 版本历史
 
-项目保留了从 `v1.0` 起的迭代提交历史，当前版本基线标签已到 `v2.62`。查看历史可进入 [Gitee Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags) 或 [GitHub Tags](https://github.com/QianmoNai/TaishanPiManager-Desktop/tags)；已编写的版本验证记录保存在 [`docs/`](docs/) 中，并非每个标签都有独立验证文档。
+项目保留了从 `v1.0` 起的迭代提交历史，当前版本基线标签已到 `v2.63`。查看历史可进入 [Gitee Tags](https://gitee.com/qianmonai/TaishanPiManager-Desktop/tags) 或 [GitHub Tags](https://github.com/QianmoNai/TaishanPiManager-Desktop/tags)；已编写的版本验证记录保存在 [`docs/`](docs/) 中，并非每个标签都有独立验证文档。
 
 当前正式发布版为 **[`v2.62-release`](https://github.com/QianmoNai/TaishanPiManager-Desktop/releases/tag/v2.62-release)**，提供 Windows x64 精简便携包，解压即可运行。近期更新包括第三方 ZIP 插件导入与信任机制、独立页面和状态卡片、后台轮询、与本体一致的浅色/深色 UI，以及卡片淡入和内容变化时的轻量动画。使用方法见[使用说明](docs/使用说明.md)，开发与示例见[第三方插件包开发指南](docs/第三方插件开发.md)。
 

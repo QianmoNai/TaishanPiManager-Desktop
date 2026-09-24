@@ -30,6 +30,7 @@ from traffic_widget import TrafficPanel
 from plugin_center import PluginCenter
 from proxy_widget import ProxyPanel
 from network_status import NETWORK_STATUS_COMMAND, parse_network_status
+from app_updates import APP_VERSION, UpdateDialog
 
 ICONS = {
     'wifi': '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
@@ -211,8 +212,10 @@ class Window(QMainWindow):
         for idx,(name,symbol) in enumerate([('设备概览','overview'),('文件管理','folder'),('系统日志','logs'),('终端','terminal'),('插件中心','settings'),('网络设置','wifi')]):
             btn=button('  '+name,lambda checked=False,i=idx:self.go(i),'nav',symbol); btn.setMinimumHeight(46); btn.setCheckable(True); self.nav.append(btn); side.addWidget(btn)
         side.addStretch()
+        self.update_dialog = None
+        self.update_btn=button('检查更新', self.check_updates, symbol='refresh'); side.addWidget(self.update_btn)
         self.theme_btn=button('深色模式', self.toggle_theme, symbol='moon'); side.addWidget(self.theme_btn); side.addSpacing(12)
-        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v2.48','caption')); body.addWidget(sidebar)
+        side.addWidget(label('●  本机独立应用','sideStatus')); side.addWidget(label('USB / 网络 ADB · v'+APP_VERSION,'caption')); body.addWidget(sidebar)
         content=QWidget(); outer=QVBoxLayout(content); outer.setContentsMargins(30,28,30,16); outer.setSpacing(17); body.addWidget(content,1)
         heading=QHBoxLayout(); titlebox=QVBoxLayout(); titlebox.setSpacing(4); self.title=label('设备概览','title'); self.subtitle=label('一眼掌握，设备的每个状态。','subtle'); titlebox.addWidget(self.title); titlebox.addWidget(self.subtitle); heading.addLayout(titlebox); heading.addStretch()
         self.badge=label('●  未连接','badge'); heading.addWidget(self.badge,0,Qt.AlignmentFlag.AlignTop); outer.addLayout(heading)
@@ -234,6 +237,16 @@ class Window(QMainWindow):
         self.timer=QTimer(self); self.timer.setInterval(5000); self.timer.timeout.connect(self.poll); self.timer.start(); self.go(0,False)
         self.sync_theme()
         if autostart: QTimer.singleShot(100,self.refresh)
+
+    def check_updates(self):
+        if self.update_dialog is not None:
+            self.update_dialog.raise_()
+            self.update_dialog.activateWindow()
+            return
+        self.update_dialog = UpdateDialog(self)
+        self.update_dialog.finished.connect(lambda *_: setattr(self, 'update_dialog', None))
+        self.update_dialog.show()
+        self.update_dialog.check()
 
     def toggle_theme(self):
         app = QApplication.instance()
@@ -922,6 +935,7 @@ class Window(QMainWindow):
         if (any(term.is_active() for term in self.terminals) or self.serial_tool.active() or self.pin_tool.active() or self.radar.active() or self.camera.active()) and not self.ask('退出软件','全部终端和串口会话将关闭，是否退出？'):
             event.ignore(); return
         for term in self.terminals: term.disconnect_device()
+        if self.update_dialog is not None: self.update_dialog.reject()
         self.camera.shutdown(); self.radar.shutdown(); self.serial_tool.shutdown(); self.timer.stop(); self.traffic.timer.stop(); event.accept()
 
 

@@ -27,7 +27,7 @@
 | 💻 交互终端 | 持续 ADB PTY 会话、多标签、实时输出、复制粘贴和中断命令 |
 | 📋 系统日志 | 查看、刷新和导出板端日志，辅助定位启动与服务问题 |
 | 🌐 网络设置 | 扫描 Wi-Fi、同步配置、查看网卡与路由，并自动同步局域网 IP |
-| 🧩 插件中心 | 安装、升级、启动、停止和卸载板端插件 |
+| 🧩 插件中心 | 管理板端插件，导入可信第三方 ZIP，打开独立页面和状态卡片 |
 | 📊 网络流量 | 实时速度、累计流量、趋势图、局域网测速和公网测速 |
 | 🔀 网络代理 | 管理 Mihomo ARM64 核心、配置、模式、节点和服务自启 |
 | 🛠️ 硬件工具 | 串口助手、GPIO/I²C/SPI/PWM、摄像头和 LD06 雷达插件 |
@@ -78,21 +78,20 @@
 
 ### 📦 直接运行发布版
 
-从 [Releases](https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases) 下载对应版本，解压后运行 `TaishanPiManager.exe`。
+从 [GitHub Release · v2.62-release](https://github.com/QianmoNai/TaishanPiManager-Desktop/releases/tag/v2.62-release) 下载 `TaishanPiManager-v2.62-Windows-x64.zip`，解压后运行 `TaishanPiManager.exe`。这是便携运行包，无需安装 Python；页面自动生成的 Source code 不是运行包。[Gitee 发行版入口](https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases)可用于查看该平台实际已发布的附件。
 
-请保留软件目录中的 `adb`、`plugins`、`licenses` 和 `source` 等配套目录。首次使用时，将泰山派通过 USB 连接到电脑并启用 ADB 调试，随后在应用中刷新设备列表。
+请保留 EXE 同目录的 `adb`、`iperf3` 和 `licenses` 文件夹。必要插件资源已内嵌，无需另附 `source` 或 `plugins` 目录。首次使用时，将泰山派通过 USB 连接到电脑并启用 ADB 调试，随后在应用中刷新设备列表。
 
 ### 💻 从源码运行
 
-环境要求：Windows、Python 3.11 或更高版本、PySide6，以及可用的 ADB 工具。
+建议使用已验证的 Windows x64、Python 3.13 环境，以及可用的 ADB 工具。以下命令在 PowerShell 中执行；完整重建步骤见[运行与构建](docs/运行与构建.md)。
 
 ```powershell
 git clone https://gitee.com/qianmonai/TaishanPiManager-Desktop.git
 cd TaishanPiManager-Desktop
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install PySide6 pyserial
-python source\desktop.py
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install PySide6==6.11.2 pyte==0.8.2 wcwidth==0.8.3 PyYAML==6.0.3
+.\.venv\Scripts\python.exe source\desktop.py
 ```
 
 如果电脑上已有 Android SDK Platform Tools，也可以直接使用系统 `adb`。否则请保留项目中的 `adb` 目录，应用会优先查找随项目提供的工具。
@@ -109,10 +108,13 @@ python source\desktop.py
 
 ```text
 docs/                使用说明、验证记录和项目资料
-docs/assets/         README 截图与测试图片
+docs/promo/pictures/ README 展示图片
+docs/assets/         历史截图与测试图片
+docs/history/        历史使用和验证文档
 docs/evidence/       测试数据、校验文件和实测结果
 source/              PySide6 桌面端源码与测试
 plugins/             随应用分发的板端插件
+examples/            第三方插件示例源码
 adb/                 Windows ADB 运行文件
 iperf3/              局域网测速工具
 server-speedtest/    自建公网测速服务示例
@@ -133,19 +135,20 @@ dist/                构建产物
 
 - 🧩 [第三方插件包开发指南](docs/第三方插件开发.md)：插件包格式、独立页面、状态卡片、后台任务、板端 Shell 操作和开发示例。
 - 📖 [使用说明](docs/使用说明.md)
+- 🏗️ [运行与构建](docs/运行与构建.md)
 - 🌐 [网络代理使用说明](docs/网络代理使用说明.md)
 - 📜 [第三方组件说明](docs/第三方组件说明.md)
-- ✅ [验证记录](docs/验证记录.md)
+- ✅ [验证记录与历史索引](docs/验证记录.md)
 
 ## 🧪 开发与验证
 
 运行源码测试：
 
 ```powershell
-python -m unittest discover -s source -p "test_*.py"
+.\.venv\Scripts\python.exe -m unittest discover -s source -p "test_*.py"
 ```
 
-构建 Windows 可执行文件时，可参考 `source/build_desktop.spec`。构建前建议先确认 ADB、插件文件和第三方许可证均已放入对应目录。
+构建使用 `source/build_desktop.spec`。依赖安装、输出目录、运行文件复制和成品自检步骤见[运行与构建](docs/运行与构建.md)；测试依赖实际环境，完整测试不等于全部硬件已经实机验证。
 
 ## 🤝 贡献
 

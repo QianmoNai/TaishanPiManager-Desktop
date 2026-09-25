@@ -3,6 +3,7 @@ import json
 import math
 import time
 from PySide6.QtCore import Qt, QProcess, QTimer, QPointF
+from adb_core import adb_arguments
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSpinBox
 from selection_widgets import QComboBox
@@ -78,7 +79,7 @@ class RadarPanel(QWidget):
             self.preparing=False
             if epoch!=self.epoch or serial!=self.owner.serial: return
             self.decoder=plugin.Decoder(); self.plot.points.clear(); self.pending.clear(); self.last_rx=0; self.session_epoch=epoch
-            self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(['-s',serial,'shell','-T',command]); self.process.start(); self.deadline.start()
+            self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(adb_arguments(['-s',serial,'shell','-T',command])); self.process.start(); self.deadline.start()
         def failed(_): self.preparing=False; self.state.setText('无法开始采集，请查看上方错误提示。')
         self.owner.work(lambda:plugin.prepare(self.owner.api.adb,serial),done,'正在准备 LD06…'); self.owner.job.signals.error.connect(failed)
     def command(self,cmd):

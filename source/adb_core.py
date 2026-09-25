@@ -14,6 +14,14 @@ import threading
 
 MAX_TRANSFER = 512 * 1024 * 1024
 MAX_OUTPUT = 2 * 1024 * 1024
+ADB_SERVER_PORT = 5038
+
+
+def adb_arguments(args):
+    """Pin every client to our loopback server, including streaming clients."""
+    return ['-H', '127.0.0.1', '-P', str(ADB_SERVER_PORT), *args]
+
+
 PORTABLE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent.parent
 LOG_PATHS = {'kernel': None, 'system': '/var/log/messages', 'monitor': '/userdata/log/traffic-monitor.log', 'autostart': '/userdata/log/check_monitor_autostart.log'}
 SERVICE_CMDS = {'status': '/userdata/bin/status_check_monitor', 'start': '/userdata/bin/start_check_monitor', 'stop': '/userdata/bin/stop_check_monitor'}
@@ -54,7 +62,7 @@ class Adb:
         # File-backed output prevents a verbose command from exhausting RAM.
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             try:
-                result = subprocess.run([self.path, *args], stdout=out, stderr=err,
+                result = subprocess.run([self.path, *adb_arguments(args)], stdout=out, stderr=err,
                                         **({'input': input_data} if input_data is not None else {'stdin': subprocess.DEVNULL}),
                                         timeout=timeout, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             except subprocess.TimeoutExpired:

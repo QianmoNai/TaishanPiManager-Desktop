@@ -8,7 +8,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QPlainTextEdit
 
-APP_VERSION = '2.66'
+APP_VERSION = '2.67'
 RELEASES_URL = 'https://gitee.com/qianmonai/TaishanPiManager-Desktop/releases'
 API_URL = 'https://gitee.com/api/v5/repos/qianmonai/TaishanPiManager-Desktop/releases/latest'
 MAX_RESPONSE = 512 * 1024

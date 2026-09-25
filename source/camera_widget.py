@@ -1,4 +1,5 @@
 from pathlib import Path
+from adb_core import adb_arguments
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QPlainTextEdit,QLabel,QFileDialog
 from PySide6.QtCore import QTimer,QProcess,Qt
 from PySide6.QtGui import QImage,QPixmap
@@ -61,7 +62,7 @@ class CameraPanel(QWidget):
   self.owner.work(lambda:plugin.prepare(self.owner.api.adb,serial,*args),ready,'正在检查摄像头插件…');self.owner.job.signals.error.connect(failed)
  def launch(self,command,serial):
   self.image=QImage(); self.parser=JpegFrames(); self.frames=0; self.view.clear(); self.status.setText('正在等待画面…')
-  self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(['-s',serial,'exec-out',command]); self.process.start(); self.ping.start(); self.timeout.start()
+  self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(adb_arguments(['-s',serial,'exec-out',command])); self.process.start(); self.ping.start(); self.timeout.start()
   for x in (self.device,self.mode,self.size,self.fps,self.refresh_btn,self.start_btn):x.setEnabled(False)
  def receive(self):
   raw=self.parser.feed(bytes(self.process.readAllStandardOutput()))

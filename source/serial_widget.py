@@ -2,6 +2,7 @@
 import codecs,csv,json,time,re
 from collections import deque
 from PySide6.QtCore import Qt,QProcess,QTimer,QRectF
+from adb_core import adb_arguments
 from PySide6.QtGui import QColor,QPainter,QPen,QPainterPath,QTextCursor
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QPlainTextEdit,QLineEdit,QCheckBox,QSpinBox,QFileDialog,QApplication,QSizePolicy
 from selection_widgets import QComboBox
@@ -124,7 +125,7 @@ class SerialPanel(QWidget):
                 target=re.search(r'/tmp/tspi-serial-[a-f0-9]{24}\.pl',command)
                 if target: self.owner.work(lambda:self.owner.api.adb.shell(serial,'rm -f '+target.group(),check=False),lambda _:None,'正在清理已取消的串口会话…')
                 return
-            self.session_epoch=epoch; self.pending.clear(); self.closing=False; self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(['-s',serial,'shell','-T',command]); self.process.start(); self.timeout.start()
+            self.session_epoch=epoch; self.pending.clear(); self.closing=False; self.process.setProgram(self.owner.api.adb.path); self.process.setArguments(adb_arguments(['-s',serial,'shell','-T',command])); self.process.start(); self.timeout.start()
         def failed(_): self.preparing=False; self.set_locked(False); self.state.setText('串口打开失败，请查看提示。')
         self.owner.work(lambda:prepare(self.owner.api.adb,serial,*args),done,'正在准备串口助手…'); self.owner.job.signals.error.connect(failed)
     def command(self,data):

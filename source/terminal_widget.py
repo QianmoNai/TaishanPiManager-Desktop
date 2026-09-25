@@ -6,6 +6,7 @@ import secrets
 from pathlib import Path
 
 import pyte
+from adb_core import adb_arguments
 from wcwidth import wcswidth
 from PySide6.QtCore import Qt, QProcess, QTimer, Signal, QRect, QPoint
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
@@ -82,7 +83,7 @@ class Terminal(QAbstractScrollArea):
             self.connectionChanged.emit(False,'请先选择在线设备，并检查 ADB。'); return
         self.adb=adb; self.serial=serial; self.tty=''; self.token=secrets.token_hex(12); self.pending=''
         self.decoder.reset(); self.clear_screen()
-        self.process.setProgram(adb); self.process.setArguments(['-s',serial,'shell','-tt'])
+        self.process.setProgram(adb); self.process.setArguments(adb_arguments(['-s',serial,'shell','-tt']))
         self.connectionChanged.emit(False,'正在建立终端会话…'); self.process.start()
 
     def started(self):
@@ -199,7 +200,7 @@ class Terminal(QAbstractScrollArea):
         if self.resize_process.state()!=QProcess.ProcessState.NotRunning:
             self.resize_timer.start(); return
         self.resize_process.setProgram(self.adb)
-        self.resize_process.setArguments(['-s',self.serial,'shell','-T','sh','-s'])
+        self.resize_process.setArguments(adb_arguments(['-s',self.serial,'shell','-T','sh','-s']))
         self.resize_process.start(); self.resize_timeout.start()
 
     def write_size(self):
